@@ -35,6 +35,11 @@
           "locationAlwaysPermission": "Allow Antasena Performance to use your location for race metrics."
         }
       ]
-    ]
+    ],
+    "extra": {
+      "eas": {
+        "projectId": "d2e87669-f65e-4d82-a3cd-2497c088f867"
+      }
+    }
   }
 }
