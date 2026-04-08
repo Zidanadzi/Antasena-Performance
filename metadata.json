@@ -1,0 +1,5 @@
+{
+  "name": "Antasena Performance",
+  "description": "Aplikasi dashboard untuk konfigurasi dan tuning modul quick shifter motor.",
+  "requestFramePermissions": ["bluetooth", "geolocation"]
+}
