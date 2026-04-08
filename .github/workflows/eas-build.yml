@@ -28,4 +28,4 @@ jobs:
         run: npm install
 
       - name: 🚀 Build on EAS
-        run: npx eas-cli build --platform all --profile production --non-interactive
+        run: npx eas-cli build --platform android --profile production --non-interactive
