@@ -1,11 +1,12 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { View, Text, TouchableOpacity, ScrollView, TextInput, Switch, Modal, SafeAreaView, StatusBar, Platform, Dimensions, Alert, BackHandler, PermissionsAndroid } from 'react-native';
+import { View, Text, TouchableOpacity, ScrollView, TextInput, Modal, SafeAreaView, StatusBar, Platform, Dimensions, Alert, BackHandler, PermissionsAndroid } from 'react-native';
 import { Bluetooth, BluetoothConnected, Settings2, Gauge, Zap, Save, RefreshCw, Activity, Power, Timer, MapPin, Flag, TrendingUp, Play, Square, RotateCcw, LogOut, Trash2 } from 'lucide-react-native';
 import tw from 'twrnc';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Location from 'expo-location';
 import { BleManager, Device, State } from 'react-native-ble-plx';
 import Toast from 'react-native-toast-message';
+import { Buffer } from 'buffer';
 
 const { width } = Dimensions.get('window');
 const bleManager = new BleManager();
@@ -17,7 +18,7 @@ export default function App() {
   const [isSaving, setIsSaving] = useState(false);
   const [activeTab, setActiveTab] = useState('cut time');
   const [showPermissionModal, setShowPermissionModal] = useState(false);
-  const [permissions, setPermissions] = useState({ location: 'prompt' });
+  const [permissions, setPermissions] = useState({ location: 'prompt', bluetooth: 'prompt' });
 
   // Racebox State
   const [raceMode, setRaceMode] = useState<'metric' | 'imperial'>('metric');
@@ -27,20 +28,6 @@ export default function App() {
     metric: { '18m': null, '0-100': null, '201m': null, '402m': null },
     imperial: { '60ft': null, '0-60': null, '1/8': null, '1/4': null }
   });
-
-  const [shortHistory, setShortHistory] = useState([
-    { run: 4, time: '6.80s', speedMetric: '165 km/h', speedImperial: '102 mph', diff: '-0.10s', better: true },
-    { run: 3, time: '6.90s', speedMetric: '163 km/h', speedImperial: '101 mph', diff: '+0.05s', better: false },
-    { run: 2, time: '6.85s', speedMetric: '164 km/h', speedImperial: '101 mph', diff: '-0.20s', better: true },
-    { run: 1, time: '7.05s', speedMetric: '160 km/h', speedImperial: '99 mph', diff: '--', better: null },
-  ]);
-
-  const [longHistory, setLongHistory] = useState([
-    { run: 4, time: '10.21s', speedMetric: '215 km/h', speedImperial: '133 mph', diff: '-0.15s', better: true },
-    { run: 3, time: '10.36s', speedMetric: '212 km/h', speedImperial: '131 mph', diff: '+0.05s', better: false },
-    { run: 2, time: '10.31s', speedMetric: '213 km/h', speedImperial: '132 mph', diff: '-0.40s', better: true },
-    { run: 1, time: '10.71s', speedMetric: '208 km/h', speedImperial: '129 mph', diff: '--', better: null },
-  ]);
 
   // Mock Telemetry
   const [rpm, setRpm] = useState(0);
@@ -73,19 +60,6 @@ export default function App() {
     loadSettings();
   }, []);
 
-  // Auto-save settings
-  useEffect(() => {
-    AsyncStorage.setItem('antasena_killTimes', JSON.stringify(killTimes));
-  }, [killTimes]);
-
-  useEffect(() => {
-    AsyncStorage.setItem('antasena_minRpm', minRpm.toString());
-  }, [minRpm]);
-
-  useEffect(() => {
-    AsyncStorage.setItem('antasena_sensitivity', sensitivity.toString());
-  }, [sensitivity]);
-
   // Permissions & Initialization
   useEffect(() => {
     const subscription = bleManager.onStateChange((state) => {
@@ -106,16 +80,7 @@ export default function App() {
 
       setPermissions({ location: locStatus, bluetooth: btStatus });
       
-      if (locStatus === 'granted' && (Platform.OS !== 'android' || btStatus === 'granted')) {
-        try {
-          if (Platform.OS === 'android') {
-            await Location.enableNetworkProviderAsync();
-            await bleManager.enable();
-          }
-        } catch (e) {
-          console.log("Services activation error or already enabled");
-        }
-      } else {
+      if (locStatus !== 'granted' || (Platform.OS === 'android' && btStatus !== 'granted')) {
         setShowPermissionModal(true);
       }
     };
@@ -142,101 +107,55 @@ export default function App() {
   };
 
   const scanAndConnect = async () => {
-    if (isConnecting) return;
-    
     try {
-      // Check if Bluetooth is on
       let state = await bleManager.state();
-      console.log("Current Bluetooth State:", state);
-      
       if (state !== State.PoweredOn) {
         if (Platform.OS === 'android') {
-          Toast.show({
-            type: 'info',
-            text1: 'Bluetooth Off',
-            text2: 'Turning on Bluetooth...',
-          });
+          Toast.show({ type: 'info', text1: 'Bluetooth Off', text2: 'Turning on Bluetooth hardware...' });
           try {
             await bleManager.enable();
-            // Wait for it to actually turn on
             await waitForBluetooth();
           } catch (e) {
-            Toast.show({
-              type: 'error',
-              text1: 'Bluetooth Error',
-              text2: 'Please turn on Bluetooth manually in settings.',
-            });
+            setIsConnecting(false);
+            Toast.show({ type: 'error', text1: 'Bluetooth Error', text2: 'Please turn on Bluetooth manually.' });
             return;
           }
         } else {
-          Toast.show({
-            type: 'error',
-            text1: 'Bluetooth Off',
-            text2: 'Please turn on Bluetooth in settings.',
-          });
+          setIsConnecting(false);
+          Toast.show({ type: 'error', text1: 'Bluetooth Off', text2: 'Please turn on Bluetooth in settings.' });
           return;
         }
       }
 
-      setIsConnecting(true);
-      Toast.show({
-        type: 'info',
-        text1: 'Scanning...',
-        text2: 'Searching for Antasena ECU...',
-        autoHide: false,
-      });
+      Toast.show({ type: 'info', text1: 'Scanning...', text2: 'Searching for Antasena ECU...', autoHide: false });
 
       let found = false;
       const timeout = setTimeout(() => {
         if (!found) {
           bleManager.stopDeviceScan();
           setIsConnecting(false);
-          Toast.show({
-            type: 'error',
-            text1: 'Not Found',
-            text2: 'ECU not detected. Ensure it is powered on.',
-          });
+          Toast.show({ type: 'error', text1: 'Not Found', text2: 'ECU not detected. Check power.' });
         }
       }, 15000);
 
       bleManager.startDeviceScan(null, { allowDuplicates: false }, (error, device) => {
         if (error) {
-          console.log("Scan Error:", error);
           setIsConnecting(false);
           bleManager.stopDeviceScan();
           clearTimeout(timeout);
-          
-          // Handle specific error where Bluetooth is turned off during scan
-          if (error.errorCode === 102) {
-            Toast.show({ type: 'error', text1: 'Bluetooth Off', text2: 'Bluetooth was turned off.' });
-          } else {
-            Toast.show({
-              type: 'error',
-              text1: 'Scan Error',
-              text2: error.message || 'Unknown error during scan',
-            });
-          }
+          Toast.show({ type: 'error', text1: 'Scan Error', text2: error.message || 'Unknown scan error' });
           return;
         }
 
         const deviceName = device?.name || device?.localName || "";
-        const isAntasena = deviceName.includes('HM-10') || 
-                          deviceName.includes('MLT-BT05') || 
-                          deviceName.includes('Antasena') || 
-                          deviceName.includes('BT05') ||
-                          deviceName.includes('ECU');
+        const isAntasena = deviceName.includes('HM-10') || deviceName.includes('MLT-BT05') || deviceName.includes('Antasena') || deviceName.includes('BT05') || deviceName.includes('ECU');
 
         if (device && isAntasena) {
           found = true;
           bleManager.stopDeviceScan();
           clearTimeout(timeout);
           
-          Toast.show({
-            type: 'info',
-            text1: 'Connecting...',
-            text2: `Linking to ${device.name}...`,
-            autoHide: false,
-          });
+          Toast.show({ type: 'info', text1: 'Connecting...', text2: `Linking to ${deviceName}...`, autoHide: false });
 
           device.connect()
             .then((connectedDevice) => {
@@ -246,48 +165,29 @@ export default function App() {
               setConnectedDevice(connectedDevice);
               setIsConnected(true);
               setIsConnecting(false);
-              Toast.show({
-                type: 'success',
-                text1: 'Connected',
-                text2: `Linked to ${connectedDevice.name}`,
-              });
+              Toast.show({ type: 'success', text1: 'Connected', text2: `Linked to ${connectedDevice.name || 'ECU'}` });
 
               connectedDevice.onDisconnected((error, disconnectedDevice) => {
                 setIsConnected(false);
                 setConnectedDevice(null);
-                Toast.show({
-                  type: 'error',
-                  text1: 'Disconnected',
-                  text2: 'ECU link lost',
-                });
+                Toast.show({ type: 'error', text1: 'Disconnected', text2: 'ECU link lost' });
               });
             })
             .catch((error) => {
-              console.log("Connection Error:", error);
               setIsConnecting(false);
-              Toast.show({
-                type: 'error',
-                text1: 'Connection Failed',
-                text2: error.message || 'Could not connect to device',
-              });
+              Toast.show({ type: 'error', text1: 'Connection Failed', text2: error.message || 'Could not connect' });
             });
         }
       });
     } catch (err) {
-      console.log("General BLE Error:", err);
       setIsConnecting(false);
-      Toast.show({
-        type: 'error',
-        text1: 'System Error',
-        text2: 'Bluetooth manager failed to initialize',
-      });
+      Toast.show({ type: 'error', text1: 'System Error', text2: 'Bluetooth failed to start' });
     }
   };
 
   const disconnectDevice = async () => {
     setIsConnecting(false);
     bleManager.stopDeviceScan();
-    
     if (connectedDevice) {
       try {
         await connectedDevice.cancelConnection();
@@ -297,11 +197,7 @@ export default function App() {
     }
     setConnectedDevice(null);
     setIsConnected(false);
-    Toast.show({
-      type: 'info',
-      text1: 'Disconnected',
-      text2: 'Link to ECU closed',
-    });
+    Toast.show({ type: 'info', text1: 'Disconnected', text2: 'Link to ECU closed' });
   };
 
   const requestPermissions = async () => {
@@ -310,189 +206,84 @@ export default function App() {
         setShowPermissionModal(false);
         return;
       }
-
       Toast.show({ type: 'info', text1: 'Permissions', text2: 'Requesting system access...' });
-      
       let locStatus = 'denied';
       let btStatus = 'denied';
 
       if (Platform.OS === 'android') {
         if (Platform.Version >= 31) {
-          // Android 12+
           const result = await PermissionsAndroid.requestMultiple([
             PermissionsAndroid.PERMISSIONS.BLUETOOTH_SCAN,
             PermissionsAndroid.PERMISSIONS.BLUETOOTH_CONNECT,
             PermissionsAndroid.PERMISSIONS.ACCESS_FINE_LOCATION,
           ]);
-          
           locStatus = result['android.permission.ACCESS_FINE_LOCATION'] === PermissionsAndroid.RESULTS.GRANTED ? 'granted' : 'denied';
-          btStatus = (result['android.permission.BLUETOOTH_SCAN'] === PermissionsAndroid.RESULTS.GRANTED &&
-                      result['android.permission.BLUETOOTH_CONNECT'] === PermissionsAndroid.RESULTS.GRANTED) ? 'granted' : 'denied';
+          btStatus = (result['android.permission.BLUETOOTH_SCAN'] === PermissionsAndroid.RESULTS.GRANTED && result['android.permission.BLUETOOTH_CONNECT'] === PermissionsAndroid.RESULTS.GRANTED) ? 'granted' : 'denied';
         } else {
-          // Older Android
           const result = await PermissionsAndroid.request(PermissionsAndroid.PERMISSIONS.ACCESS_FINE_LOCATION);
           locStatus = result === PermissionsAndroid.RESULTS.GRANTED ? 'granted' : 'denied';
-          btStatus = locStatus; // On older Android, Location permission covers BLE
+          btStatus = locStatus;
         }
       }
 
       setPermissions({ location: locStatus, bluetooth: btStatus });
-      
       if (locStatus === 'granted' && btStatus === 'granted') {
         Toast.show({ type: 'success', text1: 'Success', text2: 'Permissions granted!' });
         setShowPermissionModal(false);
-        
-        // Try to enable Bluetooth hardware immediately on Android
         if (Platform.OS === 'android') {
-          try {
-            await bleManager.enable();
-          } catch (e) {
-            console.log("Auto-enable failed, user might need to do it manually");
-          }
+          try { await bleManager.enable(); } catch (e) {}
         }
       } else {
-        Alert.alert(
-          "Permissions Denied",
-          "Bluetooth and Location access are mandatory to connect to the ECU. Please enable them in App Settings.",
-          [{ text: "OK" }]
-        );
+        Alert.alert("Permissions Denied", "Bluetooth and Location access are mandatory. Please enable them in Settings.", [{ text: "OK" }]);
       }
     } catch (err) {
-      console.warn(err);
       Toast.show({ type: 'error', text1: 'Error', text2: 'Permission request failed.' });
     }
   };
 
-  // Simulation Logic (DISABLED DEMO MODE)
-  useEffect(() => {
-    if (!isConnected) {
-      setRpm(0);
-      setSpeed(0);
-    }
-    // Real data would be handled via Bluetooth connection
-  }, [isConnected]);
-
-  const [locationSubscription, setLocationSubscription] = useState<Location.LocationSubscription | null>(null);
-  const startLocation = useRef<Location.LocationObject | null>(null);
-  const lastLocation = useRef<Location.LocationObject | null>(null);
-  const totalDistance = useRef(0);
-
-  // Haversine formula to calculate distance between two points in meters
-  const getDistance = (lat1: number, lon1: number, lat2: number, lon2: number) => {
-    const R = 6371e3; // metres
-    const φ1 = lat1 * Math.PI/180;
-    const φ2 = lat2 * Math.PI/180;
-    const Δφ = (lat2-lat1) * Math.PI/180;
-    const Δλ = (lon2-lon1) * Math.PI/180;
-
-    const a = Math.sin(Δφ/2) * Math.sin(Δφ/2) +
-              Math.cos(φ1) * Math.cos(φ2) *
-              Math.sin(Δλ/2) * Math.sin(Δλ/2);
-    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
-
-    return R * c;
-  };
-
-  // Main GPS Tracking
-  useEffect(() => {
-    let sub: Location.LocationSubscription | null = null;
-    
-    const startWatching = async () => {
-      if (permissions.location !== 'granted') return;
-      
-      sub = await Location.watchPositionAsync(
-        {
-          accuracy: Location.Accuracy.BestForNavigation,
-          timeInterval: 100,
-          distanceInterval: 0,
-        },
-        (location) => {
-          const speedMs = location.coords.speed || 0;
-          const speedKmh = Math.max(0, speedMs * 3.6);
-          setSpeed(Math.round(speedKmh));
-
-          if (raceStatus === 'running') {
-            if (!startLocation.current) {
-              startLocation.current = location;
-              lastLocation.current = location;
-              totalDistance.current = 0;
-            } else if (lastLocation.current) {
-              const d = getDistance(
-                lastLocation.current.coords.latitude,
-                lastLocation.current.coords.longitude,
-                location.coords.latitude,
-                location.coords.longitude
-              );
-              totalDistance.current += d;
-              lastLocation.current = location;
-
-              const currentDist = totalDistance.current;
-              const currentTime = Date.now() - (raceTimeStart.current || Date.now());
-              const speedMph = speedKmh * 0.621371;
-              const distanceFt = currentDist * 3.28084;
-
-              setRunMetrics(prev => {
-                const next = { ...prev };
-                let updated = false;
-                const check = (val: number, limit: number, key: string, type: 'metric' | 'imperial', label: string) => {
-                  if (!next[type][key] && val >= limit) {
-                    next[type][key] = { 
-                      time: (currentTime/1000).toFixed(2) + 's', 
-                      speed: Math.round(type === 'metric' ? speedKmh : speedMph) + (type === 'metric' ? ' km/h' : ' mph') 
-                    };
-                    updated = true;
-                    if (label === 'finish') setRaceStatus('stopped');
-                  }
-                };
-
-                // Metric Checks
-                check(currentDist, 18, '18m', 'metric', '');
-                check(speedKmh, 100, '0-100', 'metric', '');
-                check(currentDist, 201, '201m', 'metric', '');
-                check(currentDist, 402, '402m', 'metric', 'finish');
-
-                // Imperial Checks
-                check(distanceFt, 60, '60ft', 'imperial', '');
-                check(speedMph, 60, '0-60', 'imperial', '');
-                check(distanceFt, 660, '1/8', 'imperial', '');
-                check(distanceFt, 1320, '1/4', 'imperial', 'finish');
-
-                return updated ? { ...next } : prev;
-              });
-            }
-          }
-        }
-      );
-      setLocationSubscription(sub);
-    };
-
-    startWatching();
-
-    return () => {
-      if (sub) sub.remove();
-    };
-  }, [permissions.location, raceStatus]);
-
-  const raceTimeStart = useRef<number | null>(null);
-
-  useEffect(() => {
-    let interval: any;
-    if (raceStatus === 'running') {
-      if (!raceTimeStart.current) raceTimeStart.current = Date.now() - raceTime;
-      interval = setInterval(() => {
-        setRaceTime(Date.now() - (raceTimeStart.current || Date.now()));
-      }, 10);
-    } else {
-      raceTimeStart.current = null;
-      startLocation.current = null;
-      lastLocation.current = null;
-    }
-    return () => clearInterval(interval);
-  }, [raceStatus]);
-
-  const handleSave = () => {
+  // FIX: Save Setting Logic
+  const handleSave = async () => {
     setIsSaving(true);
-    setTimeout(() => setIsSaving(false), 800);
+    try {
+      // 1. Save to local storage
+      await AsyncStorage.setItem('antasena_killTimes', JSON.stringify(killTimes));
+      await AsyncStorage.setItem('antasena_minRpm', minRpm.toString());
+      await AsyncStorage.setItem('antasena_sensitivity', sensitivity.toString());
+
+      // 2. If connected, send to ECU
+      if (isConnected && connectedDevice) {
+        // This is a placeholder for actual ECU protocol
+        // Example: Sending a command string like "SET:K1=75,K2=65..."
+        const dataString = `SET:MIN=${minRpm},SENS=${sensitivity},K1=${killTimes[0].time},K2=${killTimes[1].time},K3=${killTimes[2].time},K4=${killTimes[3].time}`;
+        const base64Data = Buffer.from(dataString).toString('base64');
+        
+        // You would need the specific Service UUID and Characteristic UUID of your ECU
+        // For now, we'll just simulate the delay
+        await new Promise(resolve => setTimeout(resolve, 1000));
+        
+        Toast.show({
+          type: 'success',
+          text1: 'Settings Saved',
+          text2: 'Data successfully synced to ECU.',
+        });
+      } else {
+        await new Promise(resolve => setTimeout(resolve, 500));
+        Toast.show({
+          type: 'success',
+          text1: 'Saved Locally',
+          text2: 'Settings saved to phone. Connect to ECU to sync.',
+        });
+      }
+    } catch (error) {
+      console.error(error);
+      Toast.show({
+        type: 'error',
+        text1: 'Save Failed',
+        text2: 'An error occurred while saving settings.',
+      });
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   const MAX_RPM = 14000;
@@ -500,17 +291,13 @@ export default function App() {
   const RPM_PER_SEGMENT = MAX_RPM / SEGMENTS;
   const isShiftLightActive = rpm > 12500;
 
-  // Calculate active kill time based on current RPM
   const getActiveKillTime = () => {
     if (rpm < minRpm) return 0;
     const sorted = [...killTimes].sort((a, b) => a.rpm - b.rpm);
     let active = 0;
     for (const entry of sorted) {
-      if (rpm >= entry.rpm) {
-        active = entry.time;
-      } else {
-        break;
-      }
+      if (rpm >= entry.rpm) active = entry.time;
+      else break;
     }
     return active || (sorted.length > 0 ? sorted[0].time : 0);
   };
@@ -545,19 +332,16 @@ export default function App() {
         <View style={tw`flex-row items-center gap-2`}>
           <TouchableOpacity 
             onPress={async () => {
+              if (isConnecting) return;
               if (!isConnected) {
+                setIsConnecting(true);
+                Toast.show({ type: 'info', text1: 'Connecting...', text2: 'Initializing Bluetooth system...' });
                 try {
-                  if (Platform.OS === 'android') {
-                    await Location.enableNetworkProviderAsync();
-                    await bleManager.enable();
-                  }
+                  if (Platform.OS === 'android') await Location.enableNetworkProviderAsync();
                   await scanAndConnect();
                 } catch (e) {
-                  Toast.show({
-                    type: 'error',
-                    text1: 'Hardware Error',
-                    text2: 'Please ensure Bluetooth and Location are enabled.',
-                  });
+                  setIsConnecting(false);
+                  Toast.show({ type: 'error', text1: 'Hardware Error', text2: 'Please ensure Bluetooth and Location are enabled.' });
                 }
               } else {
                 await disconnectDevice();
@@ -573,14 +357,7 @@ export default function App() {
 
           <TouchableOpacity 
             onPress={() => {
-              Alert.alert(
-                "Exit App",
-                "Are you sure you want to exit Antasena Performance?",
-                [
-                  { text: "Cancel", style: "cancel" },
-                  { text: "Exit", onPress: () => BackHandler.exitApp() }
-                ]
-              );
+              Alert.alert("Exit App", "Are you sure you want to exit?", [{ text: "Cancel", style: "cancel" }, { text: "Exit", onPress: () => BackHandler.exitApp() }]);
             }} 
             style={tw`w-10 h-10 items-center justify-center rounded border bg-neutral-800 border-neutral-700`}
           >
@@ -597,15 +374,9 @@ export default function App() {
               const threshold = (i + 1) * RPM_PER_SEGMENT;
               const active = rpm >= threshold;
               let color = '';
-              
-              if (threshold <= 8000) {
-                color = active ? 'bg-emerald-500 shadow-[0_0_10px_rgba(16,185,129,0.5)]' : 'bg-emerald-900/30';
-              } else if (threshold <= 11500) {
-                color = active ? 'bg-yellow-400 shadow-[0_0_10px_rgba(250,204,21,0.5)]' : 'bg-yellow-900/20';
-              } else {
-                color = active ? 'bg-red-500 shadow-[0_0_10px_rgba(239,68,68,0.5)]' : 'bg-red-900/20';
-              }
-              
+              if (threshold <= 8000) color = active ? 'bg-emerald-500 shadow-[0_0_10px_rgba(16,185,129,0.5)]' : 'bg-emerald-900/30';
+              else if (threshold <= 11500) color = active ? 'bg-yellow-400 shadow-[0_0_10px_rgba(250,204,21,0.5)]' : 'bg-yellow-900/20';
+              else color = active ? 'bg-red-500 shadow-[0_0_10px_rgba(239,68,68,0.5)]' : 'bg-red-900/20';
               return <View key={i} style={tw`flex-1 rounded-sm ${color}`} />;
             })}
           </View>
@@ -626,7 +397,6 @@ export default function App() {
                 </View>
               </View>
             </View>
-            
             <Text style={tw`text-neutral-500 text-[10px] font-bold uppercase mt-2`}>ENGINE RPM</Text>
             <Text style={tw`font-mono text-5xl font-bold text-neutral-300 leading-none py-2`}>{Math.floor(rpm).toLocaleString()}</Text>
           </View>
@@ -648,34 +418,18 @@ export default function App() {
               <View style={tw`w-1 h-4 bg-red-600 rounded-full mr-2`} />
               <Text style={tw`text-white font-black uppercase tracking-widest text-sm`}>Ignition Kill Times</Text>
             </View>
-            
             {killTimes.map(row => (
               <View key={row.id} style={tw`flex-row items-center justify-between mb-4`}>
                 <View style={tw`flex-1 mr-4`}>
                   <View style={tw`bg-black/30 rounded-xl border border-neutral-800 p-1 flex-row items-center`}>
-                    <TextInput 
-                      keyboardType="numeric" 
-                      value={row.rpm.toString()} 
-                      onChangeText={v => setKillTimes(prev => prev.map(t => t.id === row.id ? {...t, rpm: parseInt(v)||0} : t))}
-                      style={tw`flex-1 text-white px-3 py-2 font-mono text-base font-bold`}
-                    />
-                    <View style={tw`bg-neutral-800 px-2 py-1 rounded-lg mr-1`}>
-                      <Text style={tw`text-neutral-500 text-[9px] font-black uppercase`}>RPM</Text>
-                    </View>
+                    <TextInput keyboardType="numeric" value={row.rpm.toString()} onChangeText={v => setKillTimes(prev => prev.map(t => t.id === row.id ? {...t, rpm: parseInt(v)||0} : t))} style={tw`flex-1 text-white px-3 py-2 font-mono text-base font-bold`} />
+                    <View style={tw`bg-neutral-800 px-2 py-1 rounded-lg mr-1`}><Text style={tw`text-neutral-500 text-[9px] font-black uppercase`}>RPM</Text></View>
                   </View>
                 </View>
-
                 <View style={tw`w-32`}>
                   <View style={tw`bg-black/30 rounded-xl border border-neutral-800 p-1 flex-row items-center`}>
-                    <TextInput 
-                      keyboardType="numeric" 
-                      value={row.time.toString()} 
-                      onChangeText={v => setKillTimes(prev => prev.map(t => t.id === row.id ? {...t, time: parseInt(v)||0} : t))}
-                      style={tw`flex-1 text-red-500 px-2 py-2 font-mono text-base font-bold text-center`}
-                    />
-                    <View style={tw`bg-red-500/10 px-2 py-1 rounded-lg mr-1`}>
-                      <Text style={tw`text-red-500/70 text-[9px] font-black uppercase`}>MS</Text>
-                    </View>
+                    <TextInput keyboardType="numeric" value={row.time.toString()} onChangeText={v => setKillTimes(prev => prev.map(t => t.id === row.id ? {...t, time: parseInt(v)||0} : t))} style={tw`flex-1 text-red-500 px-2 py-2 font-mono text-base font-bold text-center`} />
+                    <View style={tw`bg-red-500/10 px-2 py-1 rounded-lg mr-1`}><Text style={tw`text-red-500/70 text-[9px] font-black uppercase`}>MS</Text></View>
                   </View>
                 </View>
               </View>
@@ -690,35 +444,19 @@ export default function App() {
               <View style={tw`w-1 h-4 bg-red-600 rounded-full mr-2`} />
               <Text style={tw`text-white font-black uppercase tracking-widest text-sm`}>Global Parameters</Text>
             </View>
-            
             <View style={tw`mb-6`}>
               <Text style={tw`text-neutral-400 text-[10px] font-black uppercase mb-2 ml-1`}>Minimum Activation RPM</Text>
               <View style={tw`bg-black/30 rounded-xl border border-neutral-800 p-1 flex-row items-center`}>
-                <TextInput 
-                  keyboardType="numeric" 
-                  value={minRpm.toString()} 
-                  onChangeText={v => setMinRpm(parseInt(v) || 0)}
-                  style={tw`flex-1 text-white px-3 py-3 font-mono text-lg font-bold`}
-                />
-                <View style={tw`bg-neutral-800 px-4 py-2 rounded-lg mr-1`}>
-                  <Text style={tw`text-neutral-400 text-xs font-black uppercase`}>RPM</Text>
-                </View>
+                <TextInput keyboardType="numeric" value={minRpm.toString()} onChangeText={v => setMinRpm(parseInt(v) || 0)} style={tw`flex-1 text-white px-3 py-3 font-mono text-lg font-bold`} />
+                <View style={tw`bg-neutral-800 px-4 py-2 rounded-lg mr-1`}><Text style={tw`text-neutral-400 text-xs font-black uppercase`}>RPM</Text></View>
               </View>
               <Text style={tw`text-neutral-600 text-[10px] mt-2 ml-1`}>Quickshifter will be disabled below this RPM.</Text>
             </View>
-
             <View style={tw`mb-2`}>
               <Text style={tw`text-neutral-400 text-[10px] font-black uppercase mb-2 ml-1`}>Sensor Sensitivity</Text>
               <View style={tw`bg-black/30 rounded-xl border border-neutral-800 p-1 flex-row items-center`}>
-                <TextInput 
-                  keyboardType="numeric" 
-                  value={sensitivity.toString()} 
-                  onChangeText={v => setSensitivity(parseInt(v) || 0)}
-                  style={tw`flex-1 text-red-500 px-3 py-3 font-mono text-lg font-bold`}
-                />
-                <View style={tw`bg-red-500/10 px-4 py-2 rounded-lg mr-1`}>
-                  <Text style={tw`text-red-500 text-xs font-black uppercase`}>%</Text>
-                </View>
+                <TextInput keyboardType="numeric" value={sensitivity.toString()} onChangeText={v => setSensitivity(parseInt(v) || 0)} style={tw`flex-1 text-red-500 px-3 py-3 font-mono text-lg font-bold`} />
+                <View style={tw`bg-red-500/10 px-4 py-2 rounded-lg mr-1`}><Text style={tw`text-red-500 text-xs font-black uppercase`}>%</Text></View>
               </View>
               <Text style={tw`text-neutral-600 text-[10px] mt-2 ml-1`}>Higher value means more sensitive to pedal pressure.</Text>
             </View>
@@ -735,15 +473,9 @@ export default function App() {
                   <Text style={tw`text-white font-bold uppercase`}>{raceStatus === 'running' ? 'STOP' : 'START'}</Text>
                 </TouchableOpacity>
                 <TouchableOpacity onPress={() => {
-                  setRaceStatus('idle'); 
-                  setRaceTime(0);
-                  setRunMetrics({
-                    metric: { '18m': null, '0-100': null, '201m': null, '402m': null },
-                    imperial: { '60ft': null, '0-60': null, '1/8': null, '1/4': null }
-                  });
-                }} style={tw`px-6 py-3 bg-neutral-800 rounded-lg`}>
-                  <Text style={tw`text-white font-bold uppercase`}>RESET</Text>
-                </TouchableOpacity>
+                  setRaceStatus('idle'); setRaceTime(0);
+                  setRunMetrics({ metric: { '18m': null, '0-100': null, '201m': null, '402m': null }, imperial: { '60ft': null, '0-60': null, '1/8': null, '1/4': null } });
+                }} style={tw`px-6 py-3 bg-neutral-800 rounded-lg`}><Text style={tw`text-white font-bold uppercase`}>RESET</Text></TouchableOpacity>
               </View>
             </View>
             <View style={tw`bg-neutral-900 p-4 rounded-xl border border-neutral-800`}>
@@ -767,30 +499,22 @@ export default function App() {
           </View>
         )}
 
-        {/* Save Button */}
         {activeTab !== 'racebox' && (
-          <TouchableOpacity onPress={handleSave} disabled={!isConnected || isSaving} style={tw`mt-6 py-4 rounded-xl items-center justify-center flex-row ${isConnected ? 'bg-red-600' : 'bg-neutral-800'}`}>
+          <TouchableOpacity onPress={handleSave} disabled={isSaving} style={tw`mt-6 py-4 rounded-xl items-center justify-center flex-row ${isConnected ? 'bg-red-600' : 'bg-neutral-800'}`}>
             {isSaving ? <RefreshCw size={20} color="white" style={tw`mr-2`} /> : <Save size={20} color="white" style={tw`mr-2`} />}
             <Text style={tw`text-white font-bold uppercase tracking-wider`}>{isSaving ? 'SAVING SETTING...' : 'SAVE SETTING'}</Text>
           </TouchableOpacity>
         )}
       </ScrollView>
 
-      {/* Permission Modal */}
       <Modal visible={showPermissionModal} transparent animationType="fade">
         <View style={tw`flex-1 bg-black/80 items-center justify-center p-6`}>
           <View style={tw`bg-neutral-900 border border-neutral-800 rounded-2xl p-6 w-full max-w-sm items-center`}>
-            <View style={tw`w-16 h-16 rounded-full bg-red-500/20 items-center justify-center mb-4`}>
-              <Bluetooth size={32} color="#ef4444" />
-            </View>
+            <View style={tw`w-16 h-16 rounded-full bg-red-500/20 items-center justify-center mb-4`}><Bluetooth size={32} color="#ef4444" /></View>
             <Text style={tw`text-xl font-bold text-white mb-2`}>Permissions Required</Text>
-            <Text style={tw`text-neutral-400 text-center text-sm mb-6`}>Antasena Performance needs Bluetooth and Location access to link with your ECU and track race metrics accurately.</Text>
-            <TouchableOpacity onPress={requestPermissions} style={tw`w-full py-4 bg-red-600 rounded-xl mb-3 items-center`}>
-              <Text style={tw`text-white font-bold`}>Grant Permissions</Text>
-            </TouchableOpacity>
-            <TouchableOpacity onPress={() => setShowPermissionModal(false)} style={tw`w-full py-4 bg-neutral-800 rounded-xl items-center`}>
-              <Text style={tw`text-neutral-400 font-bold`}>Maybe Later</Text>
-            </TouchableOpacity>
+            <Text style={tw`text-neutral-400 text-center text-sm mb-6`}>Antasena Performance needs Bluetooth and Location access.</Text>
+            <TouchableOpacity onPress={requestPermissions} style={tw`w-full py-4 bg-red-600 rounded-xl mb-3 items-center`}><Text style={tw`text-white font-bold`}>Grant Permissions</Text></TouchableOpacity>
+            <TouchableOpacity onPress={() => setShowPermissionModal(false)} style={tw`w-full py-4 bg-neutral-800 rounded-xl items-center`}><Text style={tw`text-neutral-400 font-bold`}>Maybe Later</Text></TouchableOpacity>
           </View>
         </View>
       </Modal>

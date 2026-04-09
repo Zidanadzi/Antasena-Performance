@@ -2,49 +2,62 @@
   "expo": {
     "name": "Antasena Performance",
     "slug": "antasena-performance",
-    "owner": "zidanadzi17s-organization",
     "version": "1.0.0",
     "orientation": "portrait",
+    "icon": "./assets/icon.png",
     "userInterfaceStyle": "dark",
+    "splash": {
+      "image": "./assets/splash.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#0a0a0a"
+    },
     "assetBundlePatterns": [
       "**/*"
     ],
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.antasena.performance",
+      "infoPlist": {
+        "NSBluetoothAlwaysUsageDescription": "Antasena Performance needs Bluetooth access to connect to your ECU for real-time telemetry and tuning.",
+        "NSBluetoothPeripheralUsageDescription": "Antasena Performance needs Bluetooth access to connect to your ECU.",
+        "NSLocationWhenInUseUsageDescription": "Antasena Performance needs Location access to track race metrics and GPS speed."
+      }
+    },
     "android": {
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#0a0a0a"
+      },
       "package": "com.antasena.performance",
       "permissions": [
-        "BLUETOOTH",
-        "BLUETOOTH_ADMIN",
-        "BLUETOOTH_SCAN",
-        "BLUETOOTH_CONNECT",
-        "ACCESS_FINE_LOCATION",
-        "ACCESS_COARSE_LOCATION"
+        "android.permission.BLUETOOTH",
+        "android.permission.BLUETOOTH_ADMIN",
+        "android.permission.BLUETOOTH_SCAN",
+        "android.permission.BLUETOOTH_CONNECT",
+        "android.permission.ACCESS_FINE_LOCATION"
       ]
     },
     "web": {
+      "favicon": "./assets/favicon.png"
     },
     "plugins": [
-      [
-        "expo-location",
-        {
-          "locationAlwaysPermission": "Allow Antasena Performance to use your location for race metrics."
-        }
-      ],
       [
         "react-native-ble-plx",
         {
           "isBackgroundEnabled": false,
           "modes": [
-            "scan",
-            "connect"
+            "peripheral",
+            "central"
           ],
-          "bluetoothAlwaysPermission": "Allow Antasena Performance to use Bluetooth to connect to your ECU."
+          "bluetoothAlwaysPermission": "Allow Antasena Performance to connect to your ECU."
+        }
+      ],
+      [
+        "expo-location",
+        {
+          "locationAlwaysPermission": "Allow Antasena Performance to use your location."
         }
       ]
-    ],
-    "extra": {
-      "eas": {
-        "projectId": "d2e87669-f65e-4d82-a3cd-2497c088f867"
-      }
-    }
+    ]
   }
 }
