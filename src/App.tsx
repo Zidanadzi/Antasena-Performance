@@ -127,11 +127,35 @@ export default function App() {
   const scanAndConnect = async () => {
     if (isConnecting) return;
     
+    // Check if Bluetooth is on
+    const state = await bleManager.state();
+    if (state !== State.PoweredOn) {
+      if (Platform.OS === 'android') {
+        try {
+          await bleManager.enable();
+        } catch (e) {
+          Toast.show({
+            type: 'error',
+            text1: 'Bluetooth Off',
+            text2: 'Please turn on Bluetooth manually.',
+          });
+          return;
+        }
+      } else {
+        Toast.show({
+          type: 'error',
+          text1: 'Bluetooth Off',
+          text2: 'Please turn on Bluetooth in settings.',
+        });
+        return;
+      }
+    }
+
     setIsConnecting(true);
     Toast.show({
       type: 'info',
       text1: 'Scanning...',
-      text2: 'Looking for Antasena ECU / HM-10',
+      text2: 'Looking for Antasena ECU...',
       autoHide: false,
     });
 
@@ -142,11 +166,11 @@ export default function App() {
         setIsConnecting(false);
         Toast.show({
           type: 'error',
-          text1: 'Connection Failed',
-          text2: 'Device not found. Make sure ECU is on.',
+          text1: 'Not Found',
+          text2: 'ECU not detected. Check power.',
         });
       }
-    }, 10000);
+    }, 15000);
 
     bleManager.startDeviceScan(null, null, (error, device) => {
       if (error) {
@@ -162,8 +186,7 @@ export default function App() {
         return;
       }
 
-      // HM-10 usually has name "HM-10", "MLT-BT05", or custom
-      if (device && (device.name?.includes('HM-10') || device.name?.includes('MLT-BT05') || device.name?.includes('Antasena'))) {
+      if (device && (device.name?.includes('HM-10') || device.name?.includes('MLT-BT05') || device.name?.includes('Antasena') || device.name?.includes('BT05'))) {
         found = true;
         bleManager.stopDeviceScan();
         clearTimeout(timeout);
@@ -171,32 +194,31 @@ export default function App() {
         Toast.show({
           type: 'info',
           text1: 'Connecting...',
-          text2: `Found ${device.name}. Establishing link...`,
+          text2: `Linking to ${device.name}...`,
           autoHide: false,
         });
 
         device.connect()
-          .then((device) => {
-            return device.discoverAllServicesAndCharacteristics();
+          .then((connectedDevice) => {
+            return connectedDevice.discoverAllServicesAndCharacteristics();
           })
-          .then((device) => {
-            setConnectedDevice(device);
+          .then((connectedDevice) => {
+            setConnectedDevice(connectedDevice);
             setIsConnected(true);
             setIsConnecting(false);
             Toast.show({
               type: 'success',
               text1: 'Connected',
-              text2: `Linked to ${device.name}`,
+              text2: `Linked to ${connectedDevice.name}`,
             });
 
-            // Monitor disconnects
-            device.onDisconnected((error, disconnectedDevice) => {
+            connectedDevice.onDisconnected((error, disconnectedDevice) => {
               setIsConnected(false);
               setConnectedDevice(null);
               Toast.show({
                 type: 'error',
                 text1: 'Disconnected',
-                text2: 'Link to ECU lost',
+                text2: 'ECU link lost',
               });
             });
           })
@@ -205,8 +227,8 @@ export default function App() {
             setIsConnecting(false);
             Toast.show({
               type: 'error',
-              text1: 'Link Error',
-              text2: 'Could not establish connection',
+              text1: 'Connection Failed',
+              text2: error.message,
             });
           });
       }
@@ -557,13 +579,13 @@ export default function App() {
                   </View>
                 </View>
 
-                <View style={tw`w-24`}>
+                <View style={tw`w-32`}>
                   <View style={tw`bg-black/30 rounded-xl border border-neutral-800 p-1 flex-row items-center`}>
                     <TextInput 
                       keyboardType="numeric" 
                       value={row.time.toString()} 
                       onChangeText={v => setKillTimes(prev => prev.map(t => t.id === row.id ? {...t, time: parseInt(v)||0} : t))}
-                      style={tw`flex-1 text-red-500 px-3 py-2 font-mono text-base font-bold text-center`}
+                      style={tw`flex-1 text-red-500 px-2 py-2 font-mono text-base font-bold text-center`}
                     />
                     <View style={tw`bg-red-500/10 px-2 py-1 rounded-lg mr-1`}>
                       <Text style={tw`text-red-500/70 text-[9px] font-black uppercase`}>MS</Text>
