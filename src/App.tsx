@@ -1,16 +1,18 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { View, Text, TouchableOpacity, ScrollView, TextInput, Switch, Modal, SafeAreaView, StatusBar, Platform, Dimensions, Alert, BackHandler } from 'react-native';
+import { View, Text, TouchableOpacity, ScrollView, TextInput, Switch, Modal, SafeAreaView, StatusBar, Platform, Dimensions, Alert, BackHandler, PermissionsAndroid } from 'react-native';
 import { Bluetooth, BluetoothConnected, Settings2, Gauge, Zap, Save, RefreshCw, Activity, Power, Timer, MapPin, Flag, TrendingUp, Play, Square, RotateCcw, LogOut, Trash2 } from 'lucide-react-native';
 import tw from 'twrnc';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Location from 'expo-location';
+import { BleManager } from 'react-native-ble-plx';
 
 const { width } = Dimensions.get('window');
+const bleManager = new BleManager();
 
 export default function App() {
   const [isConnected, setIsConnected] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
-  const [activeTab, setActiveTab] = useState('telemetry');
+  const [activeTab, setActiveTab] = useState('cut time');
   const [showPermissionModal, setShowPermissionModal] = useState(false);
   const [permissions, setPermissions] = useState({ location: 'prompt' });
 
@@ -84,18 +86,27 @@ export default function App() {
   // Permissions & Initialization
   useEffect(() => {
     const initApp = async () => {
-      let { status } = await Location.getForegroundPermissionsAsync();
-      setPermissions({ location: status });
+      let { status: locStatus } = await Location.getForegroundPermissionsAsync();
       
-      if (status === 'granted') {
-        // Automatically "connect" and ensure GPS is on
+      let btStatus = 'undetermined';
+      if (Platform.OS === 'android') {
+        const hasBtConnect = await PermissionsAndroid.check(PermissionsAndroid.PERMISSIONS.BLUETOOTH_CONNECT);
+        const hasBtScan = await PermissionsAndroid.check(PermissionsAndroid.PERMISSIONS.BLUETOOTH_SCAN);
+        btStatus = (hasBtConnect && hasBtScan) ? 'granted' : 'denied';
+      }
+
+      setPermissions({ location: locStatus, bluetooth: btStatus });
+      
+      if (locStatus === 'granted' && (Platform.OS !== 'android' || btStatus === 'granted')) {
+        // Automatically "connect" and ensure GPS/BT is on
         setIsConnected(true);
         try {
           if (Platform.OS === 'android') {
             await Location.enableNetworkProviderAsync();
+            await bleManager.enable();
           }
         } catch (e) {
-          console.log("Location services already enabled or user cancelled");
+          console.log("Services activation error or already enabled");
         }
       } else {
         setShowPermissionModal(true);
@@ -106,20 +117,42 @@ export default function App() {
   }, []);
 
   const requestPermissions = async () => {
-    let { status } = await Location.requestForegroundPermissionsAsync();
-    setPermissions({ location: status });
-    
-    if (status === 'granted') {
-      setIsConnected(true);
-      try {
-        if (Platform.OS === 'android') {
-          await Location.enableNetworkProviderAsync();
-        }
-      } catch (e) {
-        console.log("Location services activation error");
+    try {
+      // 1. Request Location
+      let { status: locStatus } = await Location.requestForegroundPermissionsAsync();
+      
+      // 2. Request Bluetooth (Android 12+)
+      let btStatus = 'granted';
+      if (Platform.OS === 'android' && Platform.Version >= 31) {
+        const result = await PermissionsAndroid.requestMultiple([
+          PermissionsAndroid.PERMISSIONS.BLUETOOTH_SCAN,
+          PermissionsAndroid.PERMISSIONS.BLUETOOTH_CONNECT,
+          PermissionsAndroid.PERMISSIONS.ACCESS_FINE_LOCATION,
+        ]);
+        
+        const allGranted = result['android.permission.BLUETOOTH_SCAN'] === PermissionsAndroid.RESULTS.GRANTED &&
+                           result['android.permission.BLUETOOTH_CONNECT'] === PermissionsAndroid.RESULTS.GRANTED;
+        btStatus = allGranted ? 'granted' : 'denied';
       }
+
+      setPermissions({ location: locStatus, bluetooth: btStatus });
+      
+      if (locStatus === 'granted' && btStatus === 'granted') {
+        setIsConnected(true);
+        try {
+          if (Platform.OS === 'android') {
+            await Location.enableNetworkProviderAsync();
+            await bleManager.enable();
+          }
+        } catch (e) {
+          console.log("Services activation error");
+        }
+      }
+    } catch (err) {
+      console.warn(err);
+    } finally {
+      setShowPermissionModal(false);
     }
-    setShowPermissionModal(false);
   };
 
   // Simulation Logic (DISABLED DEMO MODE)
@@ -279,11 +312,28 @@ export default function App() {
           <View style={tw`w-8 h-8 rounded bg-red-600 items-center justify-center mr-2`}>
             <Zap size={18} color="white" />
           </View>
-          <Text style={tw`text-lg font-bold italic text-white`}>ANTASENA <Text style={tw`text-red-500`}>PERFORMANCE</Text></Text>
+          <View>
+            <Text style={tw`text-sm font-bold italic text-white leading-tight`}>ANTASENA</Text>
+            <Text style={tw`text-sm font-bold italic text-red-500 leading-tight`}>PERFORMANCE</Text>
+          </View>
         </View>
         <View style={tw`flex-row items-center gap-2`}>
           <TouchableOpacity 
-            onPress={() => setIsConnected(!isConnected)} 
+            onPress={async () => {
+              if (!isConnected) {
+                try {
+                  if (Platform.OS === 'android') {
+                    await Location.enableNetworkProviderAsync();
+                    await bleManager.enable();
+                  }
+                  setIsConnected(true);
+                } catch (e) {
+                  Alert.alert("Connection Error", "Please ensure Bluetooth and Location are enabled.");
+                }
+              } else {
+                setIsConnected(false);
+              }
+            }} 
             style={tw`px-3 py-2 rounded border ${isConnected ? 'bg-emerald-500/10 border-emerald-500/30' : 'bg-neutral-800 border-neutral-700'}`}
           >
             <Text style={tw`text-[10px] font-bold uppercase ${isConnected ? 'text-emerald-400' : 'text-neutral-400'}`}>
@@ -331,7 +381,7 @@ export default function App() {
 
         {/* Tabs */}
         <View style={tw`flex-row mb-4 bg-neutral-900 p-1 rounded-lg`}>
-          {['telemetry', 'sensor', 'racebox'].map(tab => (
+          {['cut time', 'sensor', 'racebox'].map(tab => (
             <TouchableOpacity key={tab} onPress={() => setActiveTab(tab)} style={tw`flex-1 py-2 items-center rounded ${activeTab === tab ? 'bg-neutral-800' : ''}`}>
               <Text style={tw`text-[10px] font-bold uppercase ${activeTab === tab ? 'text-red-500' : 'text-neutral-500'}`}>{tab}</Text>
             </TouchableOpacity>
@@ -339,7 +389,7 @@ export default function App() {
         </View>
 
         {/* Tab Content */}
-        {activeTab === 'telemetry' && (
+        {activeTab === 'cut time' && (
           <View style={tw`bg-neutral-900 p-4 rounded-xl border border-neutral-800`}>
             <Text style={tw`text-white font-bold uppercase mb-4`}>Ignition Kill Times</Text>
             {killTimes.map(row => (

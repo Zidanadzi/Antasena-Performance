@@ -10,7 +10,15 @@
       "**/*"
     ],
     "android": {
-      "package": "com.antasena.performance"
+      "package": "com.antasena.performance",
+      "permissions": [
+        "BLUETOOTH",
+        "BLUETOOTH_ADMIN",
+        "BLUETOOTH_SCAN",
+        "BLUETOOTH_CONNECT",
+        "ACCESS_FINE_LOCATION",
+        "ACCESS_COARSE_LOCATION"
+      ]
     },
     "web": {
     },
@@ -19,6 +27,17 @@
         "expo-location",
         {
           "locationAlwaysPermission": "Allow Antasena Performance to use your location for race metrics."
+        }
+      ],
+      [
+        "react-native-ble-plx",
+        {
+          "isBackgroundEnabled": false,
+          "modes": [
+            "scan",
+            "connect"
+          ],
+          "bluetoothAlwaysPermission": "Allow Antasena Performance to use Bluetooth to connect to your ECU."
         }
       ]
     ],
