@@ -124,12 +124,29 @@ export default function App() {
     return () => subscription.remove();
   }, []);
 
+  const waitForBluetooth = async () => {
+    return new Promise<void>((resolve, reject) => {
+      const timeout = setTimeout(() => {
+        subscription.remove();
+        reject(new Error("Bluetooth activation timeout"));
+      }, 10000);
+
+      const subscription = bleManager.onStateChange((state) => {
+        if (state === State.PoweredOn) {
+          subscription.remove();
+          clearTimeout(timeout);
+          resolve();
+        }
+      }, true);
+    });
+  };
+
   const scanAndConnect = async () => {
     if (isConnecting) return;
     
     try {
       // Check if Bluetooth is on
-      const state = await bleManager.state();
+      let state = await bleManager.state();
       console.log("Current Bluetooth State:", state);
       
       if (state !== State.PoweredOn) {
@@ -137,10 +154,12 @@ export default function App() {
           Toast.show({
             type: 'info',
             text1: 'Bluetooth Off',
-            text2: 'Attempting to enable Bluetooth...',
+            text2: 'Turning on Bluetooth...',
           });
           try {
             await bleManager.enable();
+            // Wait for it to actually turn on
+            await waitForBluetooth();
           } catch (e) {
             Toast.show({
               type: 'error',
@@ -180,21 +199,34 @@ export default function App() {
         }
       }, 15000);
 
-      bleManager.startDeviceScan(null, null, (error, device) => {
+      bleManager.startDeviceScan(null, { allowDuplicates: false }, (error, device) => {
         if (error) {
           console.log("Scan Error:", error);
           setIsConnecting(false);
           bleManager.stopDeviceScan();
           clearTimeout(timeout);
-          Toast.show({
-            type: 'error',
-            text1: 'Scan Error',
-            text2: error.message || 'Unknown error during scan',
-          });
+          
+          // Handle specific error where Bluetooth is turned off during scan
+          if (error.errorCode === 102) {
+            Toast.show({ type: 'error', text1: 'Bluetooth Off', text2: 'Bluetooth was turned off.' });
+          } else {
+            Toast.show({
+              type: 'error',
+              text1: 'Scan Error',
+              text2: error.message || 'Unknown error during scan',
+            });
+          }
           return;
         }
 
-        if (device && (device.name?.includes('HM-10') || device.name?.includes('MLT-BT05') || device.name?.includes('Antasena') || device.name?.includes('BT05'))) {
+        const deviceName = device?.name || device?.localName || "";
+        const isAntasena = deviceName.includes('HM-10') || 
+                          deviceName.includes('MLT-BT05') || 
+                          deviceName.includes('Antasena') || 
+                          deviceName.includes('BT05') ||
+                          deviceName.includes('ECU');
+
+        if (device && isAntasena) {
           found = true;
           bleManager.stopDeviceScan();
           clearTimeout(timeout);
@@ -253,6 +285,9 @@ export default function App() {
   };
 
   const disconnectDevice = async () => {
+    setIsConnecting(false);
+    bleManager.stopDeviceScan();
+    
     if (connectedDevice) {
       try {
         await connectedDevice.cancelConnection();
@@ -265,34 +300,39 @@ export default function App() {
     Toast.show({
       type: 'info',
       text1: 'Disconnected',
-      text2: 'Manual disconnect successful',
+      text2: 'Link to ECU closed',
     });
   };
 
   const requestPermissions = async () => {
     try {
-      Toast.show({ type: 'info', text1: 'Permissions', text2: 'Requesting access...' });
+      if (Platform.OS === 'ios') {
+        setShowPermissionModal(false);
+        return;
+      }
+
+      Toast.show({ type: 'info', text1: 'Permissions', text2: 'Requesting system access...' });
       
-      // 1. Request Location
-      let { status: locStatus } = await Location.requestForegroundPermissionsAsync();
-      
-      // 2. Request Bluetooth (Android 12+)
-      let btStatus = 'granted';
+      let locStatus = 'denied';
+      let btStatus = 'denied';
+
       if (Platform.OS === 'android') {
         if (Platform.Version >= 31) {
+          // Android 12+
           const result = await PermissionsAndroid.requestMultiple([
             PermissionsAndroid.PERMISSIONS.BLUETOOTH_SCAN,
             PermissionsAndroid.PERMISSIONS.BLUETOOTH_CONNECT,
             PermissionsAndroid.PERMISSIONS.ACCESS_FINE_LOCATION,
           ]);
           
-          const allGranted = result['android.permission.BLUETOOTH_SCAN'] === PermissionsAndroid.RESULTS.GRANTED &&
-                             result['android.permission.BLUETOOTH_CONNECT'] === PermissionsAndroid.RESULTS.GRANTED;
-          btStatus = allGranted ? 'granted' : 'denied';
+          locStatus = result['android.permission.ACCESS_FINE_LOCATION'] === PermissionsAndroid.RESULTS.GRANTED ? 'granted' : 'denied';
+          btStatus = (result['android.permission.BLUETOOTH_SCAN'] === PermissionsAndroid.RESULTS.GRANTED &&
+                      result['android.permission.BLUETOOTH_CONNECT'] === PermissionsAndroid.RESULTS.GRANTED) ? 'granted' : 'denied';
         } else {
-          // For older Android, Location is required for BLE scanning
+          // Older Android
           const result = await PermissionsAndroid.request(PermissionsAndroid.PERMISSIONS.ACCESS_FINE_LOCATION);
-          btStatus = result === PermissionsAndroid.RESULTS.GRANTED ? 'granted' : 'denied';
+          locStatus = result === PermissionsAndroid.RESULTS.GRANTED ? 'granted' : 'denied';
+          btStatus = locStatus; // On older Android, Location permission covers BLE
         }
       }
 
@@ -300,21 +340,26 @@ export default function App() {
       
       if (locStatus === 'granted' && btStatus === 'granted') {
         Toast.show({ type: 'success', text1: 'Success', text2: 'Permissions granted!' });
-        try {
-          if (Platform.OS === 'android') {
-            await Location.enableNetworkProviderAsync();
-            await bleManager.enable();
-          }
-        } catch (e) {
-          console.log("Services activation error");
-        }
         setShowPermissionModal(false);
+        
+        // Try to enable Bluetooth hardware immediately on Android
+        if (Platform.OS === 'android') {
+          try {
+            await bleManager.enable();
+          } catch (e) {
+            console.log("Auto-enable failed, user might need to do it manually");
+          }
+        }
       } else {
-        Toast.show({ type: 'error', text1: 'Denied', text2: 'Permissions are required for Bluetooth.' });
+        Alert.alert(
+          "Permissions Denied",
+          "Bluetooth and Location access are mandatory to connect to the ECU. Please enable them in App Settings.",
+          [{ text: "OK" }]
+        );
       }
     } catch (err) {
       console.warn(err);
-      Toast.show({ type: 'error', text1: 'Error', text2: 'Failed to request permissions.' });
+      Toast.show({ type: 'error', text1: 'Error', text2: 'Permission request failed.' });
     }
   };
 
@@ -551,8 +596,16 @@ export default function App() {
             {Array.from({ length: SEGMENTS }).map((_, i) => {
               const threshold = (i + 1) * RPM_PER_SEGMENT;
               const active = rpm >= threshold;
-              let color = 'bg-neutral-800';
-              if (active) color = threshold <= 8000 ? 'bg-emerald-500' : threshold <= 11500 ? 'bg-yellow-400' : 'bg-red-500';
+              let color = '';
+              
+              if (threshold <= 8000) {
+                color = active ? 'bg-emerald-500 shadow-[0_0_10px_rgba(16,185,129,0.5)]' : 'bg-emerald-900/30';
+              } else if (threshold <= 11500) {
+                color = active ? 'bg-yellow-400 shadow-[0_0_10px_rgba(250,204,21,0.5)]' : 'bg-yellow-900/20';
+              } else {
+                color = active ? 'bg-red-500 shadow-[0_0_10px_rgba(239,68,68,0.5)]' : 'bg-red-900/20';
+              }
+              
               return <View key={i} style={tw`flex-1 rounded-sm ${color}`} />;
             })}
           </View>
@@ -715,10 +768,12 @@ export default function App() {
         )}
 
         {/* Save Button */}
-        <TouchableOpacity onPress={handleSave} disabled={!isConnected || isSaving} style={tw`mt-6 py-4 rounded-xl items-center justify-center flex-row ${isConnected ? 'bg-red-600' : 'bg-neutral-800'}`}>
-          {isSaving ? <RefreshCw size={20} color="white" style={tw`mr-2`} /> : <Save size={20} color="white" style={tw`mr-2`} />}
-          <Text style={tw`text-white font-bold uppercase tracking-wider`}>{isSaving ? 'SAVING SETTING...' : 'SAVE SETTING'}</Text>
-        </TouchableOpacity>
+        {activeTab !== 'racebox' && (
+          <TouchableOpacity onPress={handleSave} disabled={!isConnected || isSaving} style={tw`mt-6 py-4 rounded-xl items-center justify-center flex-row ${isConnected ? 'bg-red-600' : 'bg-neutral-800'}`}>
+            {isSaving ? <RefreshCw size={20} color="white" style={tw`mr-2`} /> : <Save size={20} color="white" style={tw`mr-2`} />}
+            <Text style={tw`text-white font-bold uppercase tracking-wider`}>{isSaving ? 'SAVING SETTING...' : 'SAVE SETTING'}</Text>
+          </TouchableOpacity>
+        )}
       </ScrollView>
 
       {/* Permission Modal */}
