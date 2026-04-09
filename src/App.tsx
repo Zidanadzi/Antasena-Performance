@@ -406,6 +406,23 @@ export default function App() {
   const RPM_PER_SEGMENT = MAX_RPM / SEGMENTS;
   const isShiftLightActive = rpm > 12500;
 
+  // Calculate active kill time based on current RPM
+  const getActiveKillTime = () => {
+    if (rpm < minRpm) return 0;
+    const sorted = [...killTimes].sort((a, b) => a.rpm - b.rpm);
+    let active = 0;
+    for (const entry of sorted) {
+      if (rpm >= entry.rpm) {
+        active = entry.time;
+      } else {
+        break;
+      }
+    }
+    return active || (sorted.length > 0 ? sorted[0].time : 0);
+  };
+
+  const activeKillTime = getActiveKillTime();
+
   const renderMetricRow = (label: string, data: any) => (
     <View style={tw`flex-row items-center justify-between p-3 rounded bg-neutral-900 border border-neutral-800 mb-2`}>
       <Text style={tw`font-bold text-neutral-300 text-xs`}>{label}</Text>
@@ -491,10 +508,19 @@ export default function App() {
             })}
           </View>
           <View style={tw`items-center`}>
-            <Text style={tw`text-neutral-500 text-[10px] font-bold uppercase mb-1`}>GPS SPEED (KM/H)</Text>
-            <Text style={tw`font-mono text-6xl font-black text-white`}>{speed}</Text>
+            <View style={tw`flex-row justify-between w-full px-2 mb-2`}>
+              <View>
+                <Text style={tw`text-neutral-500 text-[10px] font-bold uppercase`}>GPS SPEED</Text>
+                <Text style={tw`font-mono text-4xl font-black text-white`}>{speed}<Text style={tw`text-xs text-neutral-500`}> KM/H</Text></Text>
+              </View>
+              <View style={tw`items-end`}>
+                <Text style={tw`text-neutral-500 text-[10px] font-bold uppercase`}>ACTIVE CUT</Text>
+                <Text style={tw`font-mono text-4xl font-black ${activeKillTime > 0 ? 'text-red-500' : 'text-neutral-700'}`}>{activeKillTime}<Text style={tw`text-xs text-neutral-500`}> MS</Text></Text>
+              </View>
+            </View>
+            
             <Text style={tw`text-neutral-500 text-[10px] font-bold uppercase mt-2`}>ENGINE RPM</Text>
-            <Text style={tw`font-mono text-3xl font-bold text-neutral-300`}>{Math.floor(rpm).toLocaleString()}</Text>
+            <Text style={tw`font-mono text-5xl font-bold text-neutral-300`}>{Math.floor(rpm).toLocaleString()}</Text>
           </View>
         </View>
 
@@ -509,65 +535,84 @@ export default function App() {
 
         {/* Tab Content */}
         {activeTab === 'cut time' && (
-          <View style={tw`bg-neutral-900 p-4 rounded-xl border border-neutral-800`}>
-            <Text style={tw`text-white font-bold uppercase mb-4`}>Ignition Kill Times</Text>
+          <View style={tw`bg-neutral-900 p-5 rounded-2xl border border-neutral-800 shadow-lg`}>
+            <View style={tw`flex-row items-center mb-6`}>
+              <View style={tw`w-1 h-4 bg-red-600 rounded-full mr-2`} />
+              <Text style={tw`text-white font-black uppercase tracking-widest text-sm`}>Ignition Kill Times</Text>
+            </View>
+            
             {killTimes.map(row => (
-              <View key={row.id} style={tw`flex-row items-center justify-between mb-3 pb-3 border-b border-neutral-800/50`}>
-                <View style={tw`flex-row items-center`}>
-                  <TextInput 
-                    keyboardType="numeric" 
-                    value={row.rpm.toString()} 
-                    onChangeText={v => setKillTimes(prev => prev.map(t => t.id === row.id ? {...t, rpm: parseInt(v)||0} : t))}
-                    style={tw`bg-neutral-800 text-white px-3 py-2 rounded border border-neutral-700 font-mono w-24 text-sm mr-2`}
-                  />
-                  <Text style={tw`text-neutral-500 text-xs font-bold`}>RPM</Text>
+              <View key={row.id} style={tw`flex-row items-center justify-between mb-4`}>
+                <View style={tw`flex-1 mr-4`}>
+                  <View style={tw`bg-black/30 rounded-xl border border-neutral-800 p-1 flex-row items-center`}>
+                    <TextInput 
+                      keyboardType="numeric" 
+                      value={row.rpm.toString()} 
+                      onChangeText={v => setKillTimes(prev => prev.map(t => t.id === row.id ? {...t, rpm: parseInt(v)||0} : t))}
+                      style={tw`flex-1 text-white px-3 py-2 font-mono text-base font-bold`}
+                    />
+                    <View style={tw`bg-neutral-800 px-2 py-1 rounded-lg mr-1`}>
+                      <Text style={tw`text-neutral-500 text-[9px] font-black uppercase`}>RPM</Text>
+                    </View>
+                  </View>
                 </View>
-                <View style={tw`flex-row items-center`}>
-                  <TextInput 
-                    keyboardType="numeric" 
-                    value={row.time.toString()} 
-                    onChangeText={v => setKillTimes(prev => prev.map(t => t.id === row.id ? {...t, time: parseInt(v)||0} : t))}
-                    style={tw`bg-neutral-800 text-red-400 px-3 py-2 rounded border border-neutral-700 font-mono w-16 text-sm mr-2`}
-                  />
-                  <Text style={tw`text-neutral-500 text-xs font-bold`}>ms</Text>
+
+                <View style={tw`w-24`}>
+                  <View style={tw`bg-black/30 rounded-xl border border-neutral-800 p-1 flex-row items-center`}>
+                    <TextInput 
+                      keyboardType="numeric" 
+                      value={row.time.toString()} 
+                      onChangeText={v => setKillTimes(prev => prev.map(t => t.id === row.id ? {...t, time: parseInt(v)||0} : t))}
+                      style={tw`flex-1 text-red-500 px-3 py-2 font-mono text-base font-bold text-center`}
+                    />
+                    <View style={tw`bg-red-500/10 px-2 py-1 rounded-lg mr-1`}>
+                      <Text style={tw`text-red-500/70 text-[9px] font-black uppercase`}>MS</Text>
+                    </View>
+                  </View>
                 </View>
               </View>
             ))}
+            <Text style={tw`text-neutral-600 text-[10px] italic mt-2`}>* Settings are applied instantly to the ECU controller.</Text>
           </View>
         )}
 
         {activeTab === 'sensor' && (
-          <View style={tw`bg-neutral-900 p-4 rounded-xl border border-neutral-800`}>
-            <Text style={tw`text-white font-bold uppercase mb-4`}>Global Parameters</Text>
+          <View style={tw`bg-neutral-900 p-5 rounded-2xl border border-neutral-800 shadow-lg`}>
+            <View style={tw`flex-row items-center mb-6`}>
+              <View style={tw`w-1 h-4 bg-red-600 rounded-full mr-2`} />
+              <Text style={tw`text-white font-black uppercase tracking-widest text-sm`}>Global Parameters</Text>
+            </View>
             
-            <View style={tw`flex-row items-center justify-between mb-3 pb-3 border-b border-neutral-800/50`}>
-              <View style={tw`flex-row items-center`}>
-                <Text style={tw`text-neutral-300 text-xs font-bold uppercase mr-3`}>Minimum RPM</Text>
-              </View>
-              <View style={tw`flex-row items-center`}>
+            <View style={tw`mb-6`}>
+              <Text style={tw`text-neutral-400 text-[10px] font-black uppercase mb-2 ml-1`}>Minimum Activation RPM</Text>
+              <View style={tw`bg-black/30 rounded-xl border border-neutral-800 p-1 flex-row items-center`}>
                 <TextInput 
                   keyboardType="numeric" 
                   value={minRpm.toString()} 
                   onChangeText={v => setMinRpm(parseInt(v) || 0)}
-                  style={tw`bg-neutral-800 text-white px-3 py-2 rounded border border-neutral-700 font-mono w-24 text-sm mr-2`}
+                  style={tw`flex-1 text-white px-3 py-3 font-mono text-lg font-bold`}
                 />
-                <Text style={tw`text-neutral-500 text-xs font-bold`}>RPM</Text>
+                <View style={tw`bg-neutral-800 px-4 py-2 rounded-lg mr-1`}>
+                  <Text style={tw`text-neutral-400 text-xs font-black uppercase`}>RPM</Text>
+                </View>
               </View>
+              <Text style={tw`text-neutral-600 text-[10px] mt-2 ml-1`}>Quickshifter will be disabled below this RPM.</Text>
             </View>
 
-            <View style={tw`flex-row items-center justify-between mb-3 pb-3 border-b border-neutral-800/50`}>
-              <View style={tw`flex-row items-center`}>
-                <Text style={tw`text-neutral-300 text-xs font-bold uppercase mr-3`}>Sensitivity</Text>
-              </View>
-              <View style={tw`flex-row items-center`}>
+            <View style={tw`mb-2`}>
+              <Text style={tw`text-neutral-400 text-[10px] font-black uppercase mb-2 ml-1`}>Sensor Sensitivity</Text>
+              <View style={tw`bg-black/30 rounded-xl border border-neutral-800 p-1 flex-row items-center`}>
                 <TextInput 
                   keyboardType="numeric" 
                   value={sensitivity.toString()} 
                   onChangeText={v => setSensitivity(parseInt(v) || 0)}
-                  style={tw`bg-neutral-800 text-red-400 px-3 py-2 rounded border border-neutral-700 font-mono w-16 text-sm mr-2`}
+                  style={tw`flex-1 text-red-500 px-3 py-3 font-mono text-lg font-bold`}
                 />
-                <Text style={tw`text-neutral-500 text-xs font-bold`}>%</Text>
+                <View style={tw`bg-red-500/10 px-4 py-2 rounded-lg mr-1`}>
+                  <Text style={tw`text-red-500 text-xs font-black uppercase`}>%</Text>
+                </View>
               </View>
+              <Text style={tw`text-neutral-600 text-[10px] mt-2 ml-1`}>Higher value means more sensitive to pedal pressure.</Text>
             </View>
           </View>
         )}
