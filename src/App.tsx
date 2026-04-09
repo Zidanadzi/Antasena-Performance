@@ -4,13 +4,16 @@ import { Bluetooth, BluetoothConnected, Settings2, Gauge, Zap, Save, RefreshCw, 
 import tw from 'twrnc';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Location from 'expo-location';
-import { BleManager } from 'react-native-ble-plx';
+import { BleManager, Device, State } from 'react-native-ble-plx';
+import Toast from 'react-native-toast-message';
 
 const { width } = Dimensions.get('window');
 const bleManager = new BleManager();
 
 export default function App() {
   const [isConnected, setIsConnected] = useState(false);
+  const [isConnecting, setIsConnecting] = useState(false);
+  const [connectedDevice, setConnectedDevice] = useState<Device | null>(null);
   const [isSaving, setIsSaving] = useState(false);
   const [activeTab, setActiveTab] = useState('cut time');
   const [showPermissionModal, setShowPermissionModal] = useState(false);
@@ -85,6 +88,12 @@ export default function App() {
 
   // Permissions & Initialization
   useEffect(() => {
+    const subscription = bleManager.onStateChange((state) => {
+      if (state === State.PoweredOn) {
+        console.log("Bluetooth is Powered On");
+      }
+    }, true);
+
     const initApp = async () => {
       let { status: locStatus } = await Location.getForegroundPermissionsAsync();
       
@@ -98,8 +107,6 @@ export default function App() {
       setPermissions({ location: locStatus, bluetooth: btStatus });
       
       if (locStatus === 'granted' && (Platform.OS !== 'android' || btStatus === 'granted')) {
-        // Automatically "connect" and ensure GPS/BT is on
-        setIsConnected(true);
         try {
           if (Platform.OS === 'android') {
             await Location.enableNetworkProviderAsync();
@@ -114,7 +121,114 @@ export default function App() {
     };
     
     initApp();
+    return () => subscription.remove();
   }, []);
+
+  const scanAndConnect = async () => {
+    if (isConnecting) return;
+    
+    setIsConnecting(true);
+    Toast.show({
+      type: 'info',
+      text1: 'Scanning...',
+      text2: 'Looking for Antasena ECU / HM-10',
+      autoHide: false,
+    });
+
+    let found = false;
+    const timeout = setTimeout(() => {
+      if (!found) {
+        bleManager.stopDeviceScan();
+        setIsConnecting(false);
+        Toast.show({
+          type: 'error',
+          text1: 'Connection Failed',
+          text2: 'Device not found. Make sure ECU is on.',
+        });
+      }
+    }, 10000);
+
+    bleManager.startDeviceScan(null, null, (error, device) => {
+      if (error) {
+        console.log(error);
+        setIsConnecting(false);
+        bleManager.stopDeviceScan();
+        clearTimeout(timeout);
+        Toast.show({
+          type: 'error',
+          text1: 'Scan Error',
+          text2: error.message,
+        });
+        return;
+      }
+
+      // HM-10 usually has name "HM-10", "MLT-BT05", or custom
+      if (device && (device.name?.includes('HM-10') || device.name?.includes('MLT-BT05') || device.name?.includes('Antasena'))) {
+        found = true;
+        bleManager.stopDeviceScan();
+        clearTimeout(timeout);
+        
+        Toast.show({
+          type: 'info',
+          text1: 'Connecting...',
+          text2: `Found ${device.name}. Establishing link...`,
+          autoHide: false,
+        });
+
+        device.connect()
+          .then((device) => {
+            return device.discoverAllServicesAndCharacteristics();
+          })
+          .then((device) => {
+            setConnectedDevice(device);
+            setIsConnected(true);
+            setIsConnecting(false);
+            Toast.show({
+              type: 'success',
+              text1: 'Connected',
+              text2: `Linked to ${device.name}`,
+            });
+
+            // Monitor disconnects
+            device.onDisconnected((error, disconnectedDevice) => {
+              setIsConnected(false);
+              setConnectedDevice(null);
+              Toast.show({
+                type: 'error',
+                text1: 'Disconnected',
+                text2: 'Link to ECU lost',
+              });
+            });
+          })
+          .catch((error) => {
+            console.log(error);
+            setIsConnecting(false);
+            Toast.show({
+              type: 'error',
+              text1: 'Link Error',
+              text2: 'Could not establish connection',
+            });
+          });
+      }
+    });
+  };
+
+  const disconnectDevice = async () => {
+    if (connectedDevice) {
+      try {
+        await connectedDevice.cancelConnection();
+      } catch (e) {
+        console.log(e);
+      }
+    }
+    setConnectedDevice(null);
+    setIsConnected(false);
+    Toast.show({
+      type: 'info',
+      text1: 'Disconnected',
+      text2: 'Manual disconnect successful',
+    });
+  };
 
   const requestPermissions = async () => {
     try {
@@ -326,18 +440,23 @@ export default function App() {
                     await Location.enableNetworkProviderAsync();
                     await bleManager.enable();
                   }
-                  setIsConnected(true);
+                  await scanAndConnect();
                 } catch (e) {
-                  Alert.alert("Connection Error", "Please ensure Bluetooth and Location are enabled.");
+                  Toast.show({
+                    type: 'error',
+                    text1: 'Hardware Error',
+                    text2: 'Please ensure Bluetooth and Location are enabled.',
+                  });
                 }
               } else {
-                setIsConnected(false);
+                await disconnectDevice();
               }
             }} 
-            style={tw`px-3 py-2 rounded border ${isConnected ? 'bg-emerald-500/10 border-emerald-500/30' : 'bg-neutral-800 border-neutral-700'}`}
+            disabled={isConnecting}
+            style={tw`px-3 py-2 rounded border ${isConnected ? 'bg-emerald-500/10 border-emerald-500/30' : isConnecting ? 'bg-neutral-800 border-neutral-700 opacity-50' : 'bg-neutral-800 border-neutral-700'}`}
           >
             <Text style={tw`text-[10px] font-bold uppercase ${isConnected ? 'text-emerald-400' : 'text-neutral-400'}`}>
-              {isConnected ? 'DISCONNECT' : 'CONNECT'}
+              {isConnecting ? 'CONNECTING...' : isConnected ? 'DISCONNECT' : 'CONNECT'}
             </Text>
           </TouchableOpacity>
 
@@ -462,7 +581,14 @@ export default function App() {
                 <TouchableOpacity onPress={() => setRaceStatus(raceStatus === 'running' ? 'stopped' : 'running')} style={tw`px-6 py-3 rounded-lg ${raceStatus === 'running' ? 'bg-red-600' : 'bg-emerald-600'}`}>
                   <Text style={tw`text-white font-bold uppercase`}>{raceStatus === 'running' ? 'STOP' : 'START'}</Text>
                 </TouchableOpacity>
-                <TouchableOpacity onPress={() => {setRaceStatus('idle'); setRaceTime(0);}} style={tw`px-6 py-3 bg-neutral-800 rounded-lg`}>
+                <TouchableOpacity onPress={() => {
+                  setRaceStatus('idle'); 
+                  setRaceTime(0);
+                  setRunMetrics({
+                    metric: { '18m': null, '0-100': null, '201m': null, '402m': null },
+                    imperial: { '60ft': null, '0-60': null, '1/8': null, '1/4': null }
+                  });
+                }} style={tw`px-6 py-3 bg-neutral-800 rounded-lg`}>
                   <Text style={tw`text-white font-bold uppercase`}>RESET</Text>
                 </TouchableOpacity>
               </View>
@@ -513,6 +639,7 @@ export default function App() {
           </View>
         </View>
       </Modal>
+      <Toast />
     </SafeAreaView>
   );
 }
