@@ -260,7 +260,7 @@ export default function App() {
                 <Text style={tw`text-white font-mono font-bold`}>{minRpm}</Text>
               </View>
               <View style={tw`h-1 bg-neutral-800 rounded-full overflow-hidden`}>
-                <View style={tw`h-full bg-red-500 w-[${(minRpm-2000)/60}%]`} />
+                <View style={[tw`h-full bg-red-500`, { width: `${(minRpm - 2000) / 60}%` }]} />
               </View>
             </View>
             <View>
@@ -269,7 +269,7 @@ export default function App() {
                 <Text style={tw`text-white font-mono font-bold`}>{sensitivity}%</Text>
               </View>
               <View style={tw`h-1 bg-neutral-800 rounded-full overflow-hidden`}>
-                <View style={tw`h-full bg-red-500 w-[${sensitivity}%]`} />
+                <View style={[tw`h-full bg-red-500`, { width: `${sensitivity}%` }]} />
               </View>
             </View>
           </View>
