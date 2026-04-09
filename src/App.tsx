@@ -81,20 +81,44 @@ export default function App() {
     AsyncStorage.setItem('antasena_sensitivity', sensitivity.toString());
   }, [sensitivity]);
 
-  // Permissions
+  // Permissions & Initialization
   useEffect(() => {
-    (async () => {
+    const initApp = async () => {
       let { status } = await Location.getForegroundPermissionsAsync();
       setPermissions({ location: status });
-      if (status !== 'granted') {
+      
+      if (status === 'granted') {
+        // Automatically "connect" and ensure GPS is on
+        setIsConnected(true);
+        try {
+          if (Platform.OS === 'android') {
+            await Location.enableNetworkProviderAsync();
+          }
+        } catch (e) {
+          console.log("Location services already enabled or user cancelled");
+        }
+      } else {
         setShowPermissionModal(true);
       }
-    })();
+    };
+    
+    initApp();
   }, []);
 
   const requestPermissions = async () => {
     let { status } = await Location.requestForegroundPermissionsAsync();
     setPermissions({ location: status });
+    
+    if (status === 'granted') {
+      setIsConnected(true);
+      try {
+        if (Platform.OS === 'android') {
+          await Location.enableNetworkProviderAsync();
+        }
+      } catch (e) {
+        console.log("Location services activation error");
+      }
+    }
     setShowPermissionModal(false);
   };
 
@@ -107,10 +131,122 @@ export default function App() {
     // Real data would be handled via Bluetooth connection
   }, [isConnected]);
 
+  const [locationSubscription, setLocationSubscription] = useState<Location.LocationSubscription | null>(null);
+  const startLocation = useRef<Location.LocationObject | null>(null);
+  const lastLocation = useRef<Location.LocationObject | null>(null);
+  const totalDistance = useRef(0);
+
+  // Haversine formula to calculate distance between two points in meters
+  const getDistance = (lat1: number, lon1: number, lat2: number, lon2: number) => {
+    const R = 6371e3; // metres
+    const φ1 = lat1 * Math.PI/180;
+    const φ2 = lat2 * Math.PI/180;
+    const Δφ = (lat2-lat1) * Math.PI/180;
+    const Δλ = (lon2-lon1) * Math.PI/180;
+
+    const a = Math.sin(Δφ/2) * Math.sin(Δφ/2) +
+              Math.cos(φ1) * Math.cos(φ2) *
+              Math.sin(Δλ/2) * Math.sin(Δλ/2);
+    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+
+    return R * c;
+  };
+
+  // Main GPS Tracking
   useEffect(() => {
+    let sub: Location.LocationSubscription | null = null;
+    
+    const startWatching = async () => {
+      if (permissions.location !== 'granted') return;
+      
+      sub = await Location.watchPositionAsync(
+        {
+          accuracy: Location.Accuracy.BestForNavigation,
+          timeInterval: 100,
+          distanceInterval: 0,
+        },
+        (location) => {
+          const speedMs = location.coords.speed || 0;
+          const speedKmh = Math.max(0, speedMs * 3.6);
+          setSpeed(Math.round(speedKmh));
+
+          if (raceStatus === 'running') {
+            if (!startLocation.current) {
+              startLocation.current = location;
+              lastLocation.current = location;
+              totalDistance.current = 0;
+            } else if (lastLocation.current) {
+              const d = getDistance(
+                lastLocation.current.coords.latitude,
+                lastLocation.current.coords.longitude,
+                location.coords.latitude,
+                location.coords.longitude
+              );
+              totalDistance.current += d;
+              lastLocation.current = location;
+
+              const currentDist = totalDistance.current;
+              const currentTime = Date.now() - (raceTimeStart.current || Date.now());
+              const speedMph = speedKmh * 0.621371;
+              const distanceFt = currentDist * 3.28084;
+
+              setRunMetrics(prev => {
+                const next = { ...prev };
+                let updated = false;
+                const check = (val: number, limit: number, key: string, type: 'metric' | 'imperial', label: string) => {
+                  if (!next[type][key] && val >= limit) {
+                    next[type][key] = { 
+                      time: (currentTime/1000).toFixed(2) + 's', 
+                      speed: Math.round(type === 'metric' ? speedKmh : speedMph) + (type === 'metric' ? ' km/h' : ' mph') 
+                    };
+                    updated = true;
+                    if (label === 'finish') setRaceStatus('stopped');
+                  }
+                };
+
+                // Metric Checks
+                check(currentDist, 18, '18m', 'metric', '');
+                check(speedKmh, 100, '0-100', 'metric', '');
+                check(currentDist, 201, '201m', 'metric', '');
+                check(currentDist, 402, '402m', 'metric', 'finish');
+
+                // Imperial Checks
+                check(distanceFt, 60, '60ft', 'imperial', '');
+                check(speedMph, 60, '0-60', 'imperial', '');
+                check(distanceFt, 660, '1/8', 'imperial', '');
+                check(distanceFt, 1320, '1/4', 'imperial', 'finish');
+
+                return updated ? { ...next } : prev;
+              });
+            }
+          }
+        }
+      );
+      setLocationSubscription(sub);
+    };
+
+    startWatching();
+
+    return () => {
+      if (sub) sub.remove();
+    };
+  }, [permissions.location, raceStatus]);
+
+  const raceTimeStart = useRef<number | null>(null);
+
+  useEffect(() => {
+    let interval: any;
     if (raceStatus === 'running') {
-      // Simulation disabled as per user request
+      if (!raceTimeStart.current) raceTimeStart.current = Date.now() - raceTime;
+      interval = setInterval(() => {
+        setRaceTime(Date.now() - (raceTimeStart.current || Date.now()));
+      }, 10);
+    } else {
+      raceTimeStart.current = null;
+      startLocation.current = null;
+      lastLocation.current = null;
     }
+    return () => clearInterval(interval);
   }, [raceStatus]);
 
   const handleSave = () => {
@@ -305,7 +441,7 @@ export default function App() {
         {/* Save Button */}
         <TouchableOpacity onPress={handleSave} disabled={!isConnected || isSaving} style={tw`mt-6 py-4 rounded-xl items-center justify-center flex-row ${isConnected ? 'bg-red-600' : 'bg-neutral-800'}`}>
           {isSaving ? <RefreshCw size={20} color="white" style={tw`mr-2`} /> : <Save size={20} color="white" style={tw`mr-2`} />}
-          <Text style={tw`text-white font-bold uppercase tracking-wider`}>{isSaving ? 'WRITING TO ECU...' : 'FLASH TO ECU'}</Text>
+          <Text style={tw`text-white font-bold uppercase tracking-wider`}>{isSaving ? 'SAVING SETTING...' : 'SAVE SETTING'}</Text>
         </TouchableOpacity>
       </ScrollView>
 
