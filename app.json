@@ -2,6 +2,7 @@
   "expo": {
     "name": "Antasena Performance",
     "slug": "antasena-performance",
+    "owner": "zidanadzi17s-organization",
     "version": "1.0.0",
     "orientation": "portrait",
     "userInterfaceStyle": "dark",
