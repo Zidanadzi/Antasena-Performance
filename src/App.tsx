@@ -127,112 +127,129 @@ export default function App() {
   const scanAndConnect = async () => {
     if (isConnecting) return;
     
-    // Check if Bluetooth is on
-    const state = await bleManager.state();
-    if (state !== State.PoweredOn) {
-      if (Platform.OS === 'android') {
-        try {
-          await bleManager.enable();
-        } catch (e) {
+    try {
+      // Check if Bluetooth is on
+      const state = await bleManager.state();
+      console.log("Current Bluetooth State:", state);
+      
+      if (state !== State.PoweredOn) {
+        if (Platform.OS === 'android') {
+          Toast.show({
+            type: 'info',
+            text1: 'Bluetooth Off',
+            text2: 'Attempting to enable Bluetooth...',
+          });
+          try {
+            await bleManager.enable();
+          } catch (e) {
+            Toast.show({
+              type: 'error',
+              text1: 'Bluetooth Error',
+              text2: 'Please turn on Bluetooth manually in settings.',
+            });
+            return;
+          }
+        } else {
           Toast.show({
             type: 'error',
             text1: 'Bluetooth Off',
-            text2: 'Please turn on Bluetooth manually.',
+            text2: 'Please turn on Bluetooth in settings.',
           });
           return;
         }
-      } else {
-        Toast.show({
-          type: 'error',
-          text1: 'Bluetooth Off',
-          text2: 'Please turn on Bluetooth in settings.',
-        });
-        return;
-      }
-    }
-
-    setIsConnecting(true);
-    Toast.show({
-      type: 'info',
-      text1: 'Scanning...',
-      text2: 'Looking for Antasena ECU...',
-      autoHide: false,
-    });
-
-    let found = false;
-    const timeout = setTimeout(() => {
-      if (!found) {
-        bleManager.stopDeviceScan();
-        setIsConnecting(false);
-        Toast.show({
-          type: 'error',
-          text1: 'Not Found',
-          text2: 'ECU not detected. Check power.',
-        });
-      }
-    }, 15000);
-
-    bleManager.startDeviceScan(null, null, (error, device) => {
-      if (error) {
-        console.log(error);
-        setIsConnecting(false);
-        bleManager.stopDeviceScan();
-        clearTimeout(timeout);
-        Toast.show({
-          type: 'error',
-          text1: 'Scan Error',
-          text2: error.message,
-        });
-        return;
       }
 
-      if (device && (device.name?.includes('HM-10') || device.name?.includes('MLT-BT05') || device.name?.includes('Antasena') || device.name?.includes('BT05'))) {
-        found = true;
-        bleManager.stopDeviceScan();
-        clearTimeout(timeout);
-        
-        Toast.show({
-          type: 'info',
-          text1: 'Connecting...',
-          text2: `Linking to ${device.name}...`,
-          autoHide: false,
-        });
+      setIsConnecting(true);
+      Toast.show({
+        type: 'info',
+        text1: 'Scanning...',
+        text2: 'Searching for Antasena ECU...',
+        autoHide: false,
+      });
 
-        device.connect()
-          .then((connectedDevice) => {
-            return connectedDevice.discoverAllServicesAndCharacteristics();
-          })
-          .then((connectedDevice) => {
-            setConnectedDevice(connectedDevice);
-            setIsConnected(true);
-            setIsConnecting(false);
-            Toast.show({
-              type: 'success',
-              text1: 'Connected',
-              text2: `Linked to ${connectedDevice.name}`,
-            });
+      let found = false;
+      const timeout = setTimeout(() => {
+        if (!found) {
+          bleManager.stopDeviceScan();
+          setIsConnecting(false);
+          Toast.show({
+            type: 'error',
+            text1: 'Not Found',
+            text2: 'ECU not detected. Ensure it is powered on.',
+          });
+        }
+      }, 15000);
 
-            connectedDevice.onDisconnected((error, disconnectedDevice) => {
-              setIsConnected(false);
-              setConnectedDevice(null);
+      bleManager.startDeviceScan(null, null, (error, device) => {
+        if (error) {
+          console.log("Scan Error:", error);
+          setIsConnecting(false);
+          bleManager.stopDeviceScan();
+          clearTimeout(timeout);
+          Toast.show({
+            type: 'error',
+            text1: 'Scan Error',
+            text2: error.message || 'Unknown error during scan',
+          });
+          return;
+        }
+
+        if (device && (device.name?.includes('HM-10') || device.name?.includes('MLT-BT05') || device.name?.includes('Antasena') || device.name?.includes('BT05'))) {
+          found = true;
+          bleManager.stopDeviceScan();
+          clearTimeout(timeout);
+          
+          Toast.show({
+            type: 'info',
+            text1: 'Connecting...',
+            text2: `Linking to ${device.name}...`,
+            autoHide: false,
+          });
+
+          device.connect()
+            .then((connectedDevice) => {
+              return connectedDevice.discoverAllServicesAndCharacteristics();
+            })
+            .then((connectedDevice) => {
+              setConnectedDevice(connectedDevice);
+              setIsConnected(true);
+              setIsConnecting(false);
+              Toast.show({
+                type: 'success',
+                text1: 'Connected',
+                text2: `Linked to ${connectedDevice.name}`,
+              });
+
+              connectedDevice.onDisconnected((error, disconnectedDevice) => {
+                setIsConnected(false);
+                setConnectedDevice(null);
+                Toast.show({
+                  type: 'error',
+                  text1: 'Disconnected',
+                  text2: 'ECU link lost',
+                });
+              });
+            })
+            .catch((error) => {
+              console.log("Connection Error:", error);
+              setIsConnecting(false);
               Toast.show({
                 type: 'error',
-                text1: 'Disconnected',
-                text2: 'ECU link lost',
+                text1: 'Connection Failed',
+                text2: error.message || 'Could not connect to device',
               });
             });
-          })
-          .catch((error) => {
-            console.log(error);
-            setIsConnecting(false);
-            Toast.show({
-              type: 'error',
-              text1: 'Connection Failed',
-              text2: error.message,
-            });
-          });
-      }
-    });
+        }
+      });
+    } catch (err) {
+      console.log("General BLE Error:", err);
+      setIsConnecting(false);
+      Toast.show({
+        type: 'error',
+        text1: 'System Error',
+        text2: 'Bluetooth manager failed to initialize',
+      });
+    }
   };
 
   const disconnectDevice = async () => {
@@ -254,27 +271,35 @@ export default function App() {
 
   const requestPermissions = async () => {
     try {
+      Toast.show({ type: 'info', text1: 'Permissions', text2: 'Requesting access...' });
+      
       // 1. Request Location
       let { status: locStatus } = await Location.requestForegroundPermissionsAsync();
       
       // 2. Request Bluetooth (Android 12+)
       let btStatus = 'granted';
-      if (Platform.OS === 'android' && Platform.Version >= 31) {
-        const result = await PermissionsAndroid.requestMultiple([
-          PermissionsAndroid.PERMISSIONS.BLUETOOTH_SCAN,
-          PermissionsAndroid.PERMISSIONS.BLUETOOTH_CONNECT,
-          PermissionsAndroid.PERMISSIONS.ACCESS_FINE_LOCATION,
-        ]);
-        
-        const allGranted = result['android.permission.BLUETOOTH_SCAN'] === PermissionsAndroid.RESULTS.GRANTED &&
-                           result['android.permission.BLUETOOTH_CONNECT'] === PermissionsAndroid.RESULTS.GRANTED;
-        btStatus = allGranted ? 'granted' : 'denied';
+      if (Platform.OS === 'android') {
+        if (Platform.Version >= 31) {
+          const result = await PermissionsAndroid.requestMultiple([
+            PermissionsAndroid.PERMISSIONS.BLUETOOTH_SCAN,
+            PermissionsAndroid.PERMISSIONS.BLUETOOTH_CONNECT,
+            PermissionsAndroid.PERMISSIONS.ACCESS_FINE_LOCATION,
+          ]);
+          
+          const allGranted = result['android.permission.BLUETOOTH_SCAN'] === PermissionsAndroid.RESULTS.GRANTED &&
+                             result['android.permission.BLUETOOTH_CONNECT'] === PermissionsAndroid.RESULTS.GRANTED;
+          btStatus = allGranted ? 'granted' : 'denied';
+        } else {
+          // For older Android, Location is required for BLE scanning
+          const result = await PermissionsAndroid.request(PermissionsAndroid.PERMISSIONS.ACCESS_FINE_LOCATION);
+          btStatus = result === PermissionsAndroid.RESULTS.GRANTED ? 'granted' : 'denied';
+        }
       }
 
       setPermissions({ location: locStatus, bluetooth: btStatus });
       
       if (locStatus === 'granted' && btStatus === 'granted') {
-        setIsConnected(true);
+        Toast.show({ type: 'success', text1: 'Success', text2: 'Permissions granted!' });
         try {
           if (Platform.OS === 'android') {
             await Location.enableNetworkProviderAsync();
@@ -283,11 +308,13 @@ export default function App() {
         } catch (e) {
           console.log("Services activation error");
         }
+        setShowPermissionModal(false);
+      } else {
+        Toast.show({ type: 'error', text1: 'Denied', text2: 'Permissions are required for Bluetooth.' });
       }
     } catch (err) {
       console.warn(err);
-    } finally {
-      setShowPermissionModal(false);
+      Toast.show({ type: 'error', text1: 'Error', text2: 'Failed to request permissions.' });
     }
   };
 
@@ -531,18 +558,24 @@ export default function App() {
           </View>
           <View style={tw`items-center`}>
             <View style={tw`flex-row justify-between w-full px-2 mb-2`}>
-              <View>
+              <View style={tw`flex-1`}>
                 <Text style={tw`text-neutral-500 text-[10px] font-bold uppercase`}>GPS SPEED</Text>
-                <Text style={tw`font-mono text-4xl font-black text-white`}>{speed}<Text style={tw`text-xs text-neutral-500`}> KM/H</Text></Text>
+                <View style={tw`flex-row items-baseline`}>
+                  <Text style={tw`font-mono text-4xl font-black text-white leading-none py-2`}>{speed}</Text>
+                  <Text style={tw`text-[10px] text-neutral-500 font-bold ml-1`}>KM/H</Text>
+                </View>
               </View>
-              <View style={tw`items-end`}>
+              <View style={tw`flex-1 items-end`}>
                 <Text style={tw`text-neutral-500 text-[10px] font-bold uppercase`}>ACTIVE CUT</Text>
-                <Text style={tw`font-mono text-4xl font-black ${activeKillTime > 0 ? 'text-red-500' : 'text-neutral-700'}`}>{activeKillTime}<Text style={tw`text-xs text-neutral-500`}> MS</Text></Text>
+                <View style={tw`flex-row items-baseline`}>
+                  <Text style={tw`font-mono text-4xl font-black ${activeKillTime > 0 ? 'text-red-500' : 'text-neutral-700'} leading-none py-2`}>{activeKillTime}</Text>
+                  <Text style={tw`text-[10px] text-neutral-500 font-bold ml-1`}>MS</Text>
+                </View>
               </View>
             </View>
             
             <Text style={tw`text-neutral-500 text-[10px] font-bold uppercase mt-2`}>ENGINE RPM</Text>
-            <Text style={tw`font-mono text-5xl font-bold text-neutral-300`}>{Math.floor(rpm).toLocaleString()}</Text>
+            <Text style={tw`font-mono text-5xl font-bold text-neutral-300 leading-none py-2`}>{Math.floor(rpm).toLocaleString()}</Text>
           </View>
         </View>
 
