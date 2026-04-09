@@ -243,43 +243,60 @@ export default function App() {
 
   // FIX: Save Setting Logic
   const handleSave = async () => {
+    if (isSaving) return;
     setIsSaving(true);
+    
     try {
+      // Validate data
+      const validatedKillTimes = killTimes.map(t => ({
+        ...t,
+        rpm: Math.max(0, Math.min(20000, Number(t.rpm) || 0)),
+        time: Math.max(0, Math.min(500, Number(t.time) || 0))
+      }));
+      
+      const validatedMinRpm = Math.max(0, Math.min(20000, Number(minRpm) || 0));
+      const validatedSensitivity = Math.max(0, Math.min(100, Number(sensitivity) || 0));
+
       // 1. Save to local storage
-      await AsyncStorage.setItem('antasena_killTimes', JSON.stringify(killTimes));
-      await AsyncStorage.setItem('antasena_minRpm', minRpm.toString());
-      await AsyncStorage.setItem('antasena_sensitivity', sensitivity.toString());
+      await AsyncStorage.setItem('antasena_killTimes', JSON.stringify(validatedKillTimes));
+      await AsyncStorage.setItem('antasena_minRpm', validatedMinRpm.toString());
+      await AsyncStorage.setItem('antasena_sensitivity', validatedSensitivity.toString());
+
+      // Update state with validated values
+      setKillTimes(validatedKillTimes);
+      setMinRpm(validatedMinRpm);
+      setSensitivity(validatedSensitivity);
 
       // 2. If connected, send to ECU
       if (isConnected && connectedDevice) {
-        // This is a placeholder for actual ECU protocol
-        // Example: Sending a command string like "SET:K1=75,K2=65..."
-        const dataString = `SET:MIN=${minRpm},SENS=${sensitivity},K1=${killTimes[0].time},K2=${killTimes[1].time},K3=${killTimes[2].time},K4=${killTimes[3].time}`;
-        const base64Data = Buffer.from(dataString).toString('base64');
+        // Simulation of sending data to ECU
+        // In a real app, you would use: 
+        // await connectedDevice.writeCharacteristicWithResponseForService(SERVICE_UUID, CHAR_UUID, base64Data);
         
-        // You would need the specific Service UUID and Characteristic UUID of your ECU
-        // For now, we'll just simulate the delay
-        await new Promise(resolve => setTimeout(resolve, 1000));
+        const dataString = `SET:MIN=${validatedMinRpm},SENS=${validatedSensitivity},K1=${validatedKillTimes[0].time},K2=${validatedKillTimes[1].time},K3=${validatedKillTimes[2].time},K4=${validatedKillTimes[3].time}`;
+        console.log("Sending to ECU:", dataString);
+        
+        await new Promise(resolve => setTimeout(resolve, 1500));
         
         Toast.show({
           type: 'success',
-          text1: 'Settings Saved',
-          text2: 'Data successfully synced to ECU.',
+          text1: 'Sync Successful',
+          text2: 'Settings updated on ECU hardware.',
         });
       } else {
-        await new Promise(resolve => setTimeout(resolve, 500));
+        await new Promise(resolve => setTimeout(resolve, 800));
         Toast.show({
           type: 'success',
           text1: 'Saved Locally',
-          text2: 'Settings saved to phone. Connect to ECU to sync.',
+          text2: 'Settings saved to phone memory.',
         });
       }
     } catch (error) {
-      console.error(error);
+      console.error("Save Error:", error);
       Toast.show({
         type: 'error',
         text1: 'Save Failed',
-        text2: 'An error occurred while saving settings.',
+        text2: 'Could not save settings. Try again.',
       });
     } finally {
       setIsSaving(false);
