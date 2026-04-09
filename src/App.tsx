@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { View, Text, TouchableOpacity, ScrollView, TextInput, Switch, Modal, SafeAreaView, StatusBar, Platform, Dimensions, Alert } from 'react-native';
+import { View, Text, TouchableOpacity, ScrollView, TextInput, Switch, Modal, SafeAreaView, StatusBar, Platform, Dimensions, Alert, BackHandler } from 'react-native';
 import { Bluetooth, BluetoothConnected, Settings2, Gauge, Zap, Save, RefreshCw, Activity, Power, Timer, MapPin, Flag, TrendingUp, Play, Square, RotateCcw, LogOut, Trash2 } from 'lucide-react-native';
 import tw from 'twrnc';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -98,62 +98,19 @@ export default function App() {
     setShowPermissionModal(false);
   };
 
-  // Simulation Logic (same as web)
+  // Simulation Logic (DISABLED DEMO MODE)
   useEffect(() => {
-    let interval: any;
-    let currentRpm = 1500;
-    if (isConnected) {
-      interval = setInterval(() => {
-        if (currentRpm > 1600) currentRpm -= Math.random() * 800 + 200;
-        else currentRpm = 1500 + (Math.random() * 150 - 75);
-        setRpm(Math.max(0, currentRpm));
-        setSpeed(currentRpm > 1600 ? Math.floor((currentRpm / 14000) * 299) : 0);
-      }, 50);
-    } else {
+    if (!isConnected) {
       setRpm(0);
       setSpeed(0);
     }
-    return () => clearInterval(interval);
+    // Real data would be handled via Bluetooth connection
   }, [isConnected]);
 
   useEffect(() => {
-    let interval: any;
     if (raceStatus === 'running') {
-      let currentDistance = 0, currentSpeedMs = 0, currentTime = 0;
-      setRunMetrics({
-        metric: { '18m': null, '0-100': null, '201m': null, '402m': null },
-        imperial: { '60ft': null, '0-60': null, '1/8': null, '1/4': null }
-      });
-      interval = setInterval(() => {
-        currentTime += 10;
-        setRaceTime(currentTime);
-        let acceleration = Math.max(2, 10 - (currentSpeedMs * 0.1));
-        currentSpeedMs += acceleration * 0.01;
-        currentDistance += currentSpeedMs * 0.01;
-        let speedKmh = currentSpeedMs * 3.6, speedMph = speedKmh * 0.621371, distanceFt = currentDistance * 3.28084;
-        setRunMetrics(prev => {
-          const next = { ...prev };
-          let updated = false;
-          const check = (dist: number, limit: number, key: string, type: 'metric' | 'imperial', label: string) => {
-            if (!next[type][key] && dist >= limit) {
-              next[type][key] = { time: (currentTime/1000).toFixed(2) + 's', speed: Math.round(type === 'metric' ? speedKmh : speedMph) + (type === 'metric' ? ' km/h' : ' mph') };
-              updated = true;
-              if (label === 'finish') setRaceStatus('stopped');
-            }
-          };
-          check(currentDistance, 18, '18m', 'metric', '');
-          check(speedKmh, 100, '0-100', 'metric', '');
-          check(currentDistance, 201, '201m', 'metric', '');
-          check(currentDistance, 402, '402m', 'metric', 'finish');
-          check(distanceFt, 60, '60ft', 'imperial', '');
-          check(speedMph, 60, '0-60', 'imperial', '');
-          check(distanceFt, 660, '1/8', 'imperial', '');
-          check(distanceFt, 1320, '1/4', 'imperial', 'finish');
-          return updated ? { ...next } : prev;
-        });
-      }, 10);
+      // Simulation disabled as per user request
     }
-    return () => clearInterval(interval);
   }, [raceStatus]);
 
   const handleSave = () => {
@@ -188,9 +145,32 @@ export default function App() {
           </View>
           <Text style={tw`text-lg font-bold italic text-white`}>ANTASENA <Text style={tw`text-red-500`}>PERFORMANCE</Text></Text>
         </View>
-        <TouchableOpacity onPress={() => setIsConnected(!isConnected)} style={tw`px-3 py-2 rounded border ${isConnected ? 'bg-emerald-500/10 border-emerald-500/30' : 'bg-neutral-800 border-neutral-700'}`}>
-          <Text style={tw`text-xs font-bold uppercase ${isConnected ? 'text-emerald-400' : 'text-neutral-400'}`}>{isConnected ? 'LINKED' : 'LINK ECU'}</Text>
-        </TouchableOpacity>
+        <View style={tw`flex-row items-center gap-2`}>
+          <TouchableOpacity 
+            onPress={() => setIsConnected(!isConnected)} 
+            style={tw`px-3 py-2 rounded border ${isConnected ? 'bg-emerald-500/10 border-emerald-500/30' : 'bg-neutral-800 border-neutral-700'}`}
+          >
+            <Text style={tw`text-[10px] font-bold uppercase ${isConnected ? 'text-emerald-400' : 'text-neutral-400'}`}>
+              {isConnected ? 'DISCONNECT' : 'CONNECT'}
+            </Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity 
+            onPress={() => {
+              Alert.alert(
+                "Exit App",
+                "Are you sure you want to exit Antasena Performance?",
+                [
+                  { text: "Cancel", style: "cancel" },
+                  { text: "Exit", onPress: () => BackHandler.exitApp() }
+                ]
+              );
+            }} 
+            style={tw`w-10 h-10 items-center justify-center rounded border bg-neutral-800 border-neutral-700`}
+          >
+            <LogOut size={20} color="#ef4444" />
+          </TouchableOpacity>
+        </View>
       </View>
 
       <ScrollView style={tw`flex-1 px-4 py-4`} contentContainerStyle={tw`pb-24`}>
@@ -254,22 +234,34 @@ export default function App() {
         {activeTab === 'sensor' && (
           <View style={tw`bg-neutral-900 p-4 rounded-xl border border-neutral-800`}>
             <Text style={tw`text-white font-bold uppercase mb-4`}>Global Parameters</Text>
-            <View style={tw`mb-6`}>
-              <View style={tw`flex-row justify-between mb-2`}>
-                <Text style={tw`text-neutral-300 text-xs font-bold uppercase`}>Minimum RPM</Text>
-                <Text style={tw`text-white font-mono font-bold`}>{minRpm}</Text>
+            
+            <View style={tw`flex-row items-center justify-between mb-3 pb-3 border-b border-neutral-800/50`}>
+              <View style={tw`flex-row items-center`}>
+                <Text style={tw`text-neutral-300 text-xs font-bold uppercase mr-3`}>Minimum RPM</Text>
               </View>
-              <View style={tw`h-1 bg-neutral-800 rounded-full overflow-hidden`}>
-                <View style={[tw`h-full bg-red-500`, { width: `${(minRpm - 2000) / 60}%` }]} />
+              <View style={tw`flex-row items-center`}>
+                <TextInput 
+                  keyboardType="numeric" 
+                  value={minRpm.toString()} 
+                  onChangeText={v => setMinRpm(parseInt(v) || 0)}
+                  style={tw`bg-neutral-800 text-white px-3 py-2 rounded border border-neutral-700 font-mono w-24 text-sm mr-2`}
+                />
+                <Text style={tw`text-neutral-500 text-xs font-bold`}>RPM</Text>
               </View>
             </View>
-            <View>
-              <View style={tw`flex-row justify-between mb-2`}>
-                <Text style={tw`text-neutral-300 text-xs font-bold uppercase`}>Sensitivity</Text>
-                <Text style={tw`text-white font-mono font-bold`}>{sensitivity}%</Text>
+
+            <View style={tw`flex-row items-center justify-between mb-3 pb-3 border-b border-neutral-800/50`}>
+              <View style={tw`flex-row items-center`}>
+                <Text style={tw`text-neutral-300 text-xs font-bold uppercase mr-3`}>Sensitivity</Text>
               </View>
-              <View style={tw`h-1 bg-neutral-800 rounded-full overflow-hidden`}>
-                <View style={[tw`h-full bg-red-500`, { width: `${sensitivity}%` }]} />
+              <View style={tw`flex-row items-center`}>
+                <TextInput 
+                  keyboardType="numeric" 
+                  value={sensitivity.toString()} 
+                  onChangeText={v => setSensitivity(parseInt(v) || 0)}
+                  style={tw`bg-neutral-800 text-red-400 px-3 py-2 rounded border border-neutral-700 font-mono w-16 text-sm mr-2`}
+                />
+                <Text style={tw`text-neutral-500 text-xs font-bold`}>%</Text>
               </View>
             </View>
           </View>
