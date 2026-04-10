@@ -6,12 +6,11 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Location from 'expo-location';
 import { BleManager, Device, State } from 'react-native-ble-plx';
 import Toast from 'react-native-toast-message';
-// Removed unused Buffer import
 
 const { width } = Dimensions.get('window');
-const bleManager = new BleManager();
 
 export default function App() {
+  const bleManager = React.useMemo(() => new BleManager(), []);
   const [isConnected, setIsConnected] = useState(false);
   const [isConnecting, setIsConnecting] = useState(false);
   const [connectedDevice, setConnectedDevice] = useState<Device | null>(null);
