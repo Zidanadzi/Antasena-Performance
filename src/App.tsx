@@ -38,6 +38,7 @@ export default function App() {
   // Mock Telemetry
   const [rpm, setRpm] = useState(0);
   const [speed, setSpeed] = useState(0);
+  const locationSubscription = useRef<Location.LocationSubscription | null>(null);
 
   // Settings State
   const [killTimes, setKillTimes] = useState([
@@ -77,6 +78,81 @@ export default function App() {
     }
     return () => clearInterval(interval);
   }, [raceStatus]);
+
+  // GPS Speed Tracking Logic
+  useEffect(() => {
+    const startSpeedTracking = async () => {
+      const { status } = await Location.getForegroundPermissionsAsync();
+      if (status !== 'granted') return;
+
+      locationSubscription.current = await Location.watchPositionAsync(
+        {
+          accuracy: Location.Accuracy.BestForNavigation,
+          timeInterval: 500,
+          distanceInterval: 1,
+        },
+        (location) => {
+          // speed is in m/s, convert to km/h
+          const currentSpeed = location.coords.speed || 0;
+          const kmh = Math.round(currentSpeed * 3.6);
+          setSpeed(kmh > 0 ? kmh : 0);
+        }
+      );
+    };
+
+    startSpeedTracking();
+
+    return () => {
+      if (locationSubscription.current) {
+        locationSubscription.current.remove();
+      }
+    };
+  }, []);
+
+  // Bluetooth Data Monitoring Logic
+  useEffect(() => {
+    if (!isConnected || !connectedDevice) {
+      setRpm(0);
+      return;
+    }
+
+    const monitorData = async () => {
+      try {
+        const services = await connectedDevice.services();
+        // Common HM-10/BT05 Serial Service and Characteristic
+        const SERVICE_UUID = "0000ffe0-0000-1000-8000-00805f9b34fb";
+        const CHAR_UUID = "0000ffe1-0000-1000-8000-00805f9b34fb";
+
+        const subscription = connectedDevice.monitorCharacteristicForService(
+          SERVICE_UUID,
+          CHAR_UUID,
+          (error, characteristic) => {
+            if (error) {
+              console.error("Monitor error:", error);
+              return;
+            }
+            if (characteristic?.value) {
+              const decodedData = Buffer.from(characteristic.value, 'base64').toString('ascii');
+              // Expected format from ECU: "RPM:8500" or "R:8500"
+              const rpmMatch = decodedData.match(/(?:RPM|R):(\d+)/i);
+              if (rpmMatch && rpmMatch[1]) {
+                setRpm(parseInt(rpmMatch[1], 10));
+              }
+            }
+          }
+        );
+
+        return () => subscription.remove();
+      } catch (e) {
+        console.error("Failed to start monitoring:", e);
+      }
+    };
+
+    const cleanup = monitorData();
+    return () => {
+      cleanup.then(unsub => unsub && unsub());
+    };
+  }, [isConnected, connectedDevice]);
 
   // Permissions & Initialization
   useEffect(() => {
