@@ -88,10 +88,10 @@ export default function App() {
 
   // Settings State
   const [killTimes, setKillTimes] = useState([
-    { id: 1, rpm: 4000, time: 75 },
-    { id: 2, rpm: 7000, time: 65 },
-    { id: 3, rpm: 10000, time: 55 },
-    { id: 4, rpm: 13000, time: 50 },
+    { id: 1, rpm: 3000, time: 75 },
+    { id: 2, rpm: 6000, time: 65 },
+    { id: 3, rpm: 9000, time: 55 },
+    { id: 4, rpm: 12000, time: 50 },
   ]);
   const [minRpm, setMinRpm] = useState(3000);
   const [sensitivity, setSensitivity] = useState(60);
@@ -641,7 +641,7 @@ export default function App() {
           <View style={tw`bg-neutral-900 p-5 rounded-2xl border border-neutral-800 shadow-lg`}>
             <View style={tw`flex-row items-center mb-6`}>
               <View style={tw`w-1 h-4 bg-red-600 rounded-full mr-2`} />
-              <Text style={tw`text-white font-black uppercase tracking-widest text-sm`}>Ignition Kill Times</Text>
+              <Text style={tw`text-white font-black uppercase tracking-widest text-sm`}>Ignition Cut Times</Text>
             </View>
             {killTimes.map(row => (
               <View key={row.id} style={tw`flex-row items-center justify-between mb-4`}>
@@ -659,7 +659,7 @@ export default function App() {
                 </View>
               </View>
             ))}
-            <Text style={tw`text-neutral-600 text-[10px] italic mt-2`}>* Settings are applied instantly to the ECU controller.</Text>
+            <Text style={tw`text-neutral-600 text-[10px] italic mt-2`}>* Settings are applied instantly to the Modul controller.</Text>
           </View>
         )}
 
