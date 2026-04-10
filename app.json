@@ -2,7 +2,6 @@
   "expo": {
     "name": "Antasena Performance",
     "slug": "antasena-project",
-    "owner": "ziddan17s-organization",
     "version": "1.0.0",
     "orientation": "portrait",
     "userInterfaceStyle": "dark",
@@ -35,6 +34,14 @@
     "web": {
     },
     "plugins": [
+      [
+        "expo-build-properties",
+        {
+          "android": {
+            "minSdkVersion": 23
+          }
+        }
+      ],
       [
         "react-native-ble-plx",
         {

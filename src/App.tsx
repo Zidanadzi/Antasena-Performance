@@ -6,7 +6,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Location from 'expo-location';
 import { BleManager, Device, State } from 'react-native-ble-plx';
 import Toast from 'react-native-toast-message';
-import { Buffer } from 'buffer';
+// Removed unused Buffer import
 
 const { width } = Dimensions.get('window');
 const bleManager = new BleManager();
