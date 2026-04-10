@@ -66,6 +66,18 @@ export default function App() {
     loadSettings();
   }, []);
 
+  // Racebox Timer Logic
+  useEffect(() => {
+    let interval: any;
+    if (raceStatus === 'running') {
+      const startTime = Date.now() - raceTime;
+      interval = setInterval(() => {
+        setRaceTime(Date.now() - startTime);
+      }, 10);
+    }
+    return () => clearInterval(interval);
+  }, [raceStatus]);
+
   // Permissions & Initialization
   useEffect(() => {
     if (!bleManager) return;
