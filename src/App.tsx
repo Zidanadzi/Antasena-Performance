@@ -10,7 +10,14 @@ import Toast from 'react-native-toast-message';
 const { width } = Dimensions.get('window');
 
 export default function App() {
-  const bleManager = React.useMemo(() => new BleManager(), []);
+  const bleManager = React.useMemo(() => {
+    try {
+      return new BleManager();
+    } catch (e) {
+      console.error("BleManager failed to initialize", e);
+      return null;
+    }
+  }, []);
   const [isConnected, setIsConnected] = useState(false);
   const [isConnecting, setIsConnecting] = useState(false);
   const [connectedDevice, setConnectedDevice] = useState<Device | null>(null);
@@ -61,6 +68,7 @@ export default function App() {
 
   // Permissions & Initialization
   useEffect(() => {
+    if (!bleManager) return;
     const subscription = bleManager.onStateChange((state) => {
       if (state === State.PoweredOn) {
         console.log("Bluetooth is Powered On");
@@ -89,6 +97,7 @@ export default function App() {
   }, []);
 
   const waitForBluetooth = async () => {
+    if (!bleManager) return;
     return new Promise<void>((resolve, reject) => {
       const timeout = setTimeout(() => {
         subscription.remove();
@@ -106,6 +115,10 @@ export default function App() {
   };
 
   const scanAndConnect = async () => {
+    if (!bleManager) {
+      Toast.show({ type: 'error', text1: 'Bluetooth Error', text2: 'Bluetooth module not available' });
+      return;
+    }
     try {
       let state = await bleManager.state();
       if (state !== State.PoweredOn) {
@@ -186,7 +199,7 @@ export default function App() {
 
   const disconnectDevice = async () => {
     setIsConnecting(false);
-    bleManager.stopDeviceScan();
+    if (bleManager) bleManager.stopDeviceScan();
     if (connectedDevice) {
       try {
         await connectedDevice.cancelConnection();
@@ -229,7 +242,7 @@ export default function App() {
       if (locStatus === 'granted' && btStatus === 'granted') {
         Toast.show({ type: 'success', text1: 'Success', text2: 'Permissions granted!' });
         setShowPermissionModal(false);
-        if (Platform.OS === 'android') {
+        if (Platform.OS === 'android' && bleManager) {
           try { await bleManager.enable(); } catch (e) {}
         }
       } else {
