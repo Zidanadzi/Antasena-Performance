@@ -2,7 +2,7 @@
   "expo": {
     "name": "Antasena Performance",
     "slug": "antasena-performance",
-    "owner": "zidanadzi17s-organization",
+    "owner": "ziddan17s-organization",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
@@ -62,7 +62,7 @@
     ],
     "extra": {
       "eas": {
-        "projectId": "d2e87669-f65e-4d82-a3cd-2497c088f867"
+        "projectId": "15ceb7c4-349a-46ba-8f74-799059d600e5"
       }
     }
   }
