@@ -9,6 +9,26 @@ import Toast from 'react-native-toast-message';
 
 const { width } = Dimensions.get('window');
 
+interface RunMetric {
+  time: string;
+  speed: string;
+}
+
+interface RunMetrics {
+  metric: {
+    '18m': RunMetric | null;
+    '0-100': RunMetric | null;
+    '201m': RunMetric | null;
+    '402m': RunMetric | null;
+  };
+  imperial: {
+    '60ft': RunMetric | null;
+    '0-60': RunMetric | null;
+    '1/8': RunMetric | null;
+    '1/4': RunMetric | null;
+  };
+}
+
 export default function App() {
   const bleManager = React.useMemo(() => {
     try {
@@ -30,10 +50,36 @@ export default function App() {
   const [raceMode, setRaceMode] = useState<'metric' | 'imperial'>('metric');
   const [raceStatus, setRaceStatus] = useState<'idle' | 'running' | 'stopped'>('idle');
   const [raceTime, setRaceTime] = useState(0);
-  const [runMetrics, setRunMetrics] = useState({
+  const [startLocation, setStartLocation] = useState<Location.LocationObjectCoords | null>(null);
+  const [runMetrics, setRunMetrics] = useState<RunMetrics>({
     metric: { '18m': null, '0-100': null, '201m': null, '402m': null },
     imperial: { '60ft': null, '0-60': null, '1/8': null, '1/4': null }
   });
+
+  // Refs for GPS callback to avoid staleness
+  const raceStatusRef = useRef(raceStatus);
+  const runMetricsRef = useRef(runMetrics);
+  const raceTimeRef = useRef(raceTime);
+  const startLocationRef = useRef(startLocation);
+
+  useEffect(() => { raceStatusRef.current = raceStatus; }, [raceStatus]);
+  useEffect(() => { runMetricsRef.current = runMetrics; }, [runMetrics]);
+  useEffect(() => { raceTimeRef.current = raceTime; }, [raceTime]);
+  useEffect(() => { startLocationRef.current = startLocation; }, [startLocation]);
+
+  // Helper for distance calculation (Haversine)
+  const calculateDistance = (lat1: number, lon1: number, lat2: number, lon2: number) => {
+    const R = 6371e3; // metres
+    const φ1 = lat1 * Math.PI / 180;
+    const φ2 = lat2 * Math.PI / 180;
+    const Δφ = (lat2 - lat1) * Math.PI / 180;
+    const Δλ = (lon2 - lon1) * Math.PI / 180;
+    const a = Math.sin(Δφ / 2) * Math.sin(Δφ / 2) +
+              Math.cos(φ1) * Math.cos(φ2) *
+              Math.sin(Δλ / 2) * Math.sin(Δλ / 2);
+    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+    return R * c;
+  };
 
   // Mock Telemetry
   const [rpm, setRpm] = useState(0);
@@ -96,6 +142,68 @@ export default function App() {
           const currentSpeed = location.coords.speed || 0;
           const kmh = Math.round(currentSpeed * 3.6);
           setSpeed(kmh > 0 ? kmh : 0);
+
+          // Racebox Milestone Detection
+          if (raceStatusRef.current === 'running') {
+            if (!startLocationRef.current) {
+              setStartLocation(location.coords);
+              return;
+            }
+
+            const dist = calculateDistance(
+              startLocationRef.current.latitude, startLocationRef.current.longitude,
+              location.coords.latitude, location.coords.longitude
+            );
+
+            const currentTimeStr = (raceTimeRef.current / 1000).toFixed(2) + 's';
+            const newMetrics = { ...runMetricsRef.current };
+            let updated = false;
+
+            // Metric Milestones
+            if (raceMode === 'metric') {
+              if (!newMetrics.metric['18m'] && dist >= 18) {
+                newMetrics.metric['18m'] = { time: currentTimeStr, speed: kmh + ' km/h' };
+                updated = true;
+              }
+              if (!newMetrics.metric['0-100'] && kmh >= 100) {
+                newMetrics.metric['0-100'] = { time: currentTimeStr, speed: '100 km/h' };
+                updated = true;
+              }
+              if (!newMetrics.metric['201m'] && dist >= 201) {
+                newMetrics.metric['201m'] = { time: currentTimeStr, speed: kmh + ' km/h' };
+                updated = true;
+              }
+              if (!newMetrics.metric['402m'] && dist >= 402) {
+                newMetrics.metric['402m'] = { time: currentTimeStr, speed: kmh + ' km/h' };
+                updated = true;
+                setRaceStatus('stopped'); // Auto stop at 402m
+              }
+            } 
+            // Imperial Milestones
+            else {
+              if (!newMetrics.imperial['60ft'] && dist >= 18.288) {
+                newMetrics.imperial['60ft'] = { time: currentTimeStr, speed: Math.round(kmh * 0.621371) + ' mph' };
+                updated = true;
+              }
+              if (!newMetrics.imperial['0-60'] && kmh >= 96.56) {
+                newMetrics.imperial['0-60'] = { time: currentTimeStr, speed: '60 mph' };
+                updated = true;
+              }
+              if (!newMetrics.imperial['1/8'] && dist >= 201.168) {
+                newMetrics.imperial['1/8'] = { time: currentTimeStr, speed: Math.round(kmh * 0.621371) + ' mph' };
+                updated = true;
+              }
+              if (!newMetrics.imperial['1/4'] && dist >= 402.336) {
+                newMetrics.imperial['1/4'] = { time: currentTimeStr, speed: Math.round(kmh * 0.621371) + ' mph' };
+                updated = true;
+                setRaceStatus('stopped'); // Auto stop at 1/4 mile
+              }
+            }
+
+            if (updated) {
+              setRunMetrics(newMetrics);
+            }
+          }
         }
       );
     };
@@ -590,7 +698,7 @@ export default function App() {
                   <Text style={tw`text-white font-bold uppercase`}>{raceStatus === 'running' ? 'STOP' : 'START'}</Text>
                 </TouchableOpacity>
                 <TouchableOpacity onPress={() => {
-                  setRaceStatus('idle'); setRaceTime(0);
+                  setRaceStatus('idle'); setRaceTime(0); setStartLocation(null);
                   setRunMetrics({ metric: { '18m': null, '0-100': null, '201m': null, '402m': null }, imperial: { '60ft': null, '0-60': null, '1/8': null, '1/4': null } });
                 }} style={tw`px-6 py-3 bg-neutral-800 rounded-lg`}><Text style={tw`text-white font-bold uppercase`}>RESET</Text></TouchableOpacity>
               </View>
