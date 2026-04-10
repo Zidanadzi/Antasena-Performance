@@ -16,13 +16,11 @@ interface RunMetric {
 
 interface RunMetrics {
   metric: {
-    '18m': RunMetric | null;
     '0-100': RunMetric | null;
     '201m': RunMetric | null;
     '402m': RunMetric | null;
   };
   imperial: {
-    '60ft': RunMetric | null;
     '0-60': RunMetric | null;
     '1/8': RunMetric | null;
     '1/4': RunMetric | null;
@@ -51,9 +49,10 @@ export default function App() {
   const [raceStatus, setRaceStatus] = useState<'idle' | 'running' | 'stopped'>('idle');
   const [raceTime, setRaceTime] = useState(0);
   const [startLocation, setStartLocation] = useState<Location.LocationObjectCoords | null>(null);
+  const [gpsAccuracy, setGpsAccuracy] = useState<number | null>(null);
   const [runMetrics, setRunMetrics] = useState<RunMetrics>({
-    metric: { '18m': null, '0-100': null, '201m': null, '402m': null },
-    imperial: { '60ft': null, '0-60': null, '1/8': null, '1/4': null }
+    metric: { '0-100': null, '201m': null, '402m': null },
+    imperial: { '0-60': null, '1/8': null, '1/4': null }
   });
 
   // Refs for GPS callback to avoid staleness
@@ -88,10 +87,10 @@ export default function App() {
 
   // Settings State
   const [killTimes, setKillTimes] = useState([
-    { id: 1, rpm: 3000, time: 75 },
-    { id: 2, rpm: 6000, time: 65 },
-    { id: 3, rpm: 9000, time: 55 },
-    { id: 4, rpm: 12000, time: 50 },
+    { id: 1, rpm: 4000, time: 75 },
+    { id: 2, rpm: 7000, time: 65 },
+    { id: 3, rpm: 10000, time: 55 },
+    { id: 4, rpm: 13000, time: 50 },
   ]);
   const [minRpm, setMinRpm] = useState(3000);
   const [sensitivity, setSensitivity] = useState(60);
@@ -142,6 +141,7 @@ export default function App() {
           const currentSpeed = location.coords.speed || 0;
           const kmh = Math.round(currentSpeed * 3.6);
           setSpeed(kmh > 0 ? kmh : 0);
+          setGpsAccuracy(location.coords.accuracy);
 
           // Racebox Milestone Detection
           if (raceStatusRef.current === 'running') {
@@ -161,10 +161,6 @@ export default function App() {
 
             // Metric Milestones
             if (raceMode === 'metric') {
-              if (!newMetrics.metric['18m'] && dist >= 18) {
-                newMetrics.metric['18m'] = { time: currentTimeStr, speed: kmh + ' km/h' };
-                updated = true;
-              }
               if (!newMetrics.metric['0-100'] && kmh >= 100) {
                 newMetrics.metric['0-100'] = { time: currentTimeStr, speed: '100 km/h' };
                 updated = true;
@@ -181,10 +177,6 @@ export default function App() {
             } 
             // Imperial Milestones
             else {
-              if (!newMetrics.imperial['60ft'] && dist >= 18.288) {
-                newMetrics.imperial['60ft'] = { time: currentTimeStr, speed: Math.round(kmh * 0.621371) + ' mph' };
-                updated = true;
-              }
               if (!newMetrics.imperial['0-60'] && kmh >= 96.56) {
                 newMetrics.imperial['0-60'] = { time: currentTimeStr, speed: '60 mph' };
                 updated = true;
@@ -641,7 +633,7 @@ export default function App() {
           <View style={tw`bg-neutral-900 p-5 rounded-2xl border border-neutral-800 shadow-lg`}>
             <View style={tw`flex-row items-center mb-6`}>
               <View style={tw`w-1 h-4 bg-red-600 rounded-full mr-2`} />
-              <Text style={tw`text-white font-black uppercase tracking-widest text-sm`}>Ignition Cut Times</Text>
+              <Text style={tw`text-white font-black uppercase tracking-widest text-sm`}>Ignition Kill Times</Text>
             </View>
             {killTimes.map(row => (
               <View key={row.id} style={tw`flex-row items-center justify-between mb-4`}>
@@ -659,7 +651,7 @@ export default function App() {
                 </View>
               </View>
             ))}
-            <Text style={tw`text-neutral-600 text-[10px] italic mt-2`}>* Settings are applied instantly to the Modul controller.</Text>
+            <Text style={tw`text-neutral-600 text-[10px] italic mt-2`}>* Settings are applied instantly to the ECU controller.</Text>
           </View>
         )}
 
@@ -699,22 +691,28 @@ export default function App() {
                 </TouchableOpacity>
                 <TouchableOpacity onPress={() => {
                   setRaceStatus('idle'); setRaceTime(0); setStartLocation(null);
-                  setRunMetrics({ metric: { '18m': null, '0-100': null, '201m': null, '402m': null }, imperial: { '60ft': null, '0-60': null, '1/8': null, '1/4': null } });
+                  setRunMetrics({ metric: { '0-100': null, '201m': null, '402m': null }, imperial: { '0-60': null, '1/8': null, '1/4': null } });
                 }} style={tw`px-6 py-3 bg-neutral-800 rounded-lg`}><Text style={tw`text-white font-bold uppercase`}>RESET</Text></TouchableOpacity>
               </View>
             </View>
             <View style={tw`bg-neutral-900 p-4 rounded-xl border border-neutral-800`}>
-              <Text style={tw`text-neutral-400 font-bold uppercase text-xs mb-4`}>Latest Run Breakdown</Text>
+              <View style={tw`flex-row justify-between items-center mb-4`}>
+                <Text style={tw`text-neutral-400 font-bold uppercase text-xs`}>Latest Run Breakdown</Text>
+                <View style={tw`flex-row items-center`}>
+                  <MapPin size={10} color={gpsAccuracy && gpsAccuracy < 10 ? '#10b981' : gpsAccuracy && gpsAccuracy < 30 ? '#facc15' : '#ef4444'} style={tw`mr-1`} />
+                  <Text style={tw`text-[9px] font-bold ${gpsAccuracy && gpsAccuracy < 10 ? 'text-emerald-500' : gpsAccuracy && gpsAccuracy < 30 ? 'text-yellow-500' : 'text-red-500'}`}>
+                    GPS: {gpsAccuracy ? gpsAccuracy.toFixed(1) + 'm' : 'NO SIGNAL'}
+                  </Text>
+                </View>
+              </View>
               {raceMode === 'metric' ? (
                 <>
-                  {renderMetricRow('18m (60ft)', runMetrics.metric['18m'])}
                   {renderMetricRow('0 - 100 km/h', runMetrics.metric['0-100'])}
                   {renderMetricRow('201 Meter', runMetrics.metric['201m'])}
                   {renderMetricRow('402 Meter', runMetrics.metric['402m'])}
                 </>
               ) : (
                 <>
-                  {renderMetricRow('60 ft', runMetrics.imperial['60ft'])}
                   {renderMetricRow('0 - 60 mph', runMetrics.imperial['0-60'])}
                   {renderMetricRow('1/8 Mile', runMetrics.imperial['1/8'])}
                   {renderMetricRow('1/4 Mile', runMetrics.imperial['1/4'])}
