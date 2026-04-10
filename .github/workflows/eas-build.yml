@@ -22,4 +22,4 @@ jobs:
       - name: Build on EAS
         env:
           EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
-        run: npx eas build --platform android --profile production --non-interactive
+        run: npx eas build --platform android --profile preview --non-interactive
