@@ -307,6 +307,17 @@ export default function App() {
       Toast.show({ type: 'error', text1: 'Bluetooth Error', text2: 'Bluetooth module not available' });
       return;
     }
+
+    // Check permissions first on Android
+    if (Platform.OS === 'android') {
+      const { status: locStatus } = await Location.getForegroundPermissionsAsync();
+      if (locStatus !== 'granted') {
+        setShowPermissionModal(true);
+        setIsConnecting(false);
+        return;
+      }
+    }
+
     try {
       let state = await bleManager.state();
       if (state !== State.PoweredOn) {
@@ -334,9 +345,14 @@ export default function App() {
         if (!found) {
           bleManager.stopDeviceScan();
           setIsConnecting(false);
-          Toast.show({ type: 'error', text1: 'Not Found', text2: 'ECU not detected. Check power.' });
+          Toast.show({ 
+            type: 'error', 
+            text1: 'Not Found', 
+            text2: 'ECU not detected. Ensure HM-10 is blinking and GPS is ON.',
+            visibilityTime: 5000 
+          });
         }
-      }, 15000);
+      }, 20000); // Increased timeout to 20s
 
       bleManager.startDeviceScan(null, { allowDuplicates: false }, (error, device) => {
         if (error) {
@@ -348,7 +364,20 @@ export default function App() {
         }
 
         const deviceName = device?.name || device?.localName || "";
-        const isAntasena = deviceName.includes('HM-10') || deviceName.includes('MLT-BT05') || deviceName.includes('Antasena') || deviceName.includes('BT05') || deviceName.includes('ECU');
+        const serviceUUIDs = device?.serviceUUIDs || [];
+        const hasHM10Service = serviceUUIDs.some(uuid => uuid.toLowerCase().includes('ffe0'));
+
+        // Broaden detection for various HM-10 clones and generic names
+        const isAntasena = 
+          hasHM10Service ||
+          deviceName.includes('HM-10') || 
+          deviceName.includes('MLT-BT05') || 
+          deviceName.includes('BT05') || 
+          deviceName.includes('JDY') || 
+          deviceName.includes('DSD') || 
+          deviceName.includes('Antasena') || 
+          deviceName.includes('ECU') ||
+          deviceName.includes('Serial');
 
         if (device && isAntasena) {
           found = true;
