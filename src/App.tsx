@@ -86,7 +86,8 @@ export default function App() {
 
   const bleManager = useRef<BleManager | null>(null);
   const locationSubscription = useRef<Location.LocationSubscription | null>(null);
-  const raceTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const raceTimerRef = useRef<number | null>(null);
+  const startTimeRef = useRef<number>(0);
   const startLocation = useRef<Location.LocationObjectCoords | null>(null);
 
   // Initialize BLE Manager
@@ -178,18 +179,20 @@ export default function App() {
     return () => locationSubscription.current?.remove();
   }, [raceStatus, raceTime]);
 
-  // Race Timer
+  // Race Timer (requestAnimationFrame for smoothness)
   useEffect(() => {
     if (raceStatus === 'running') {
-      const start = Date.now() - raceTime;
-      raceTimerRef.current = setInterval(() => {
-        setRaceTime(Date.now() - start);
-      }, 10);
+      startTimeRef.current = performance.now() - raceTime;
+      const step = () => {
+        setRaceTime(performance.now() - startTimeRef.current);
+        raceTimerRef.current = requestAnimationFrame(step);
+      };
+      raceTimerRef.current = requestAnimationFrame(step);
     } else {
-      if (raceTimerRef.current) clearInterval(raceTimerRef.current);
+      if (raceTimerRef.current) cancelAnimationFrame(raceTimerRef.current);
     }
     return () => {
-      if (raceTimerRef.current) clearInterval(raceTimerRef.current);
+      if (raceTimerRef.current) cancelAnimationFrame(raceTimerRef.current);
     };
   }, [raceStatus]);
 
@@ -400,29 +403,32 @@ export default function App() {
     const activeSegments = Math.floor((rpm / maxRpm) * segments);
 
     return (
-      <View style={tw`w-full bg-neutral-900 border-2 border-neutral-800 rounded-3xl p-6 mb-4 shadow-2xl`}>
-        <View style={tw`flex-row justify-between items-end mb-4`}>
+      <View style={tw`w-full bg-neutral-900 border border-neutral-800 rounded-3xl p-5 mb-4`}>
+        <View style={tw`flex-row justify-between items-center mb-6`}>
           <View>
-            <Text style={tw`text-neutral-500 text-[10px] font-black tracking-widest uppercase`}>Engine RPM</Text>
-            <Text style={tw`text-5xl font-black text-white font-mono`}>{rpm.toLocaleString()}</Text>
+            <Text style={tw`text-neutral-500 text-[9px] font-black tracking-widest uppercase mb-1`}>Engine RPM</Text>
+            <View style={tw`flex-row items-baseline`}>
+              <Text style={tw`text-5xl font-black text-white font-mono`}>{rpm.toLocaleString()}</Text>
+              <Text style={tw`text-xs text-neutral-600 font-bold ml-2`}>RPM</Text>
+            </View>
           </View>
           <View style={tw`items-end`}>
-            <Text style={tw`text-neutral-500 text-[10px] font-black tracking-widest uppercase`}>GPS Speed</Text>
+            <Text style={tw`text-neutral-500 text-[9px] font-black tracking-widest uppercase mb-1`}>GPS Speed</Text>
             <View style={tw`flex-row items-baseline`}>
-              <Text style={tw`text-3xl font-black text-red-500 font-mono`}>{speed}</Text>
+              <Text style={tw`text-4xl font-black text-red-500 font-mono`}>{speed}</Text>
               <Text style={tw`text-[10px] text-neutral-600 font-bold ml-1`}>KM/H</Text>
             </View>
           </View>
         </View>
 
-        <View style={tw`flex-row gap-1 h-10`}>
+        <View style={tw`flex-row gap-1 h-8`}>
           {Array.from({ length: segments }).map((_, i) => {
             const isActive = i < activeSegments;
-            let color = 'bg-neutral-800';
+            let color = 'bg-neutral-800 opacity-30';
             if (isActive) {
-              if (i < 14) color = 'bg-emerald-500 shadow-[0_0_10px_#10b981]';
-              else if (i < 20) color = 'bg-yellow-500 shadow-[0_0_10px_#f59e0b]';
-              else color = 'bg-red-500 shadow-[0_0_10px_#ef4444]';
+              if (i < 14) color = 'bg-emerald-500 shadow-[0_0_10px_#10b981] opacity-100';
+              else if (i < 20) color = 'bg-yellow-500 shadow-[0_0_10px_#f59e0b] opacity-100';
+              else color = 'bg-red-500 shadow-[0_0_10px_#ef4444] opacity-100';
             }
             return <View key={i} style={tw`flex-1 rounded-sm ${color}`} />;
           })}
@@ -482,20 +488,26 @@ export default function App() {
             
             <View style={tw`flex-row gap-4 mb-6`}>
               <View style={tw`flex-1 bg-neutral-900 p-5 rounded-3xl border border-neutral-800`}>
-                <View style={tw`flex-row items-center mb-2`}>
+                <View style={tw`flex-row items-center mb-1`}>
                   <Activity size={12} color="#525252" style={tw`mr-1`} />
-                  <Text style={tw`text-neutral-500 text-[10px] font-black uppercase`}>Min RPM</Text>
+                  <Text style={tw`text-neutral-500 text-[9px] font-black uppercase`}>RPM Minimum</Text>
                 </View>
-                <Text style={tw`text-3xl font-black text-white font-mono`}>{minRpm}</Text>
+                <View style={tw`flex-row items-baseline`}>
+                  <Text style={tw`text-3xl font-black text-white font-mono`}>{minRpm}</Text>
+                  <Text style={tw`text-[9px] text-neutral-600 font-bold ml-1`}>RPM</Text>
+                </View>
               </View>
               <View style={tw`flex-1 bg-neutral-900 p-5 rounded-3xl border border-neutral-800`}>
-                <View style={tw`flex-row items-center mb-2`}>
-                  <Timer size={12} color="#525252" style={tw`mr-1`} />
-                  <Text style={tw`text-neutral-500 text-[10px] font-black uppercase`}>Active Cut</Text>
+                <View style={tw`flex-row items-center mb-1`}>
+                  <Zap size={12} color="#525252" style={tw`mr-1`} />
+                  <Text style={tw`text-neutral-500 text-[9px] font-black uppercase`}>Active Cut</Text>
                 </View>
-                <Text style={tw`text-3xl font-black text-red-500 font-mono`}>
-                  {rpm > minRpm ? tableKill[0] : 0} <Text style={tw`text-xs text-neutral-600`}>ms</Text>
-                </Text>
+                <View style={tw`flex-row items-baseline`}>
+                  <Text style={tw`text-3xl font-black text-red-500 font-mono`}>
+                    {rpm > minRpm ? tableKill[0] : 0}
+                  </Text>
+                  <Text style={tw`text-[9px] text-neutral-600 font-bold ml-1`}>MS</Text>
+                </View>
               </View>
             </View>
 
@@ -519,7 +531,7 @@ export default function App() {
         {activeTab === 'tuning' && (
           <View>
             <View style={tw`bg-neutral-900 p-6 rounded-3xl border border-neutral-800 mb-6`}>
-              <Text style={tw`text-neutral-500 text-[10px] font-black uppercase mb-4 tracking-widest`}>Activation Threshold</Text>
+              <Text style={tw`text-neutral-500 text-[10px] font-black uppercase mb-4 tracking-widest`}>RPM Minimum Active</Text>
               <View style={tw`bg-black rounded-2xl border border-neutral-800 p-4 flex-row items-center`}>
                 <TextInput 
                   keyboardType="numeric" 
@@ -531,56 +543,50 @@ export default function App() {
               </View>
             </View>
 
-            {tableRpm.map((r, i) => (
-              <View key={i} style={tw`bg-neutral-900 p-6 rounded-3xl border border-neutral-800 mb-4`}>
-                <View style={tw`flex-row justify-between items-center mb-4`}>
-                  <Text style={tw`text-red-500 font-black italic tracking-tighter`}>STAGE {i+1}</Text>
-                  <TrendingUp size={14} color="#404040" />
-                </View>
-                
-                <View style={tw`flex-row gap-4`}>
-                  <View style={tw`flex-1`}>
-                    <Text style={tw`text-neutral-600 text-[9px] font-black uppercase mb-2 ml-1`}>RPM Trigger</Text>
-                    <View style={tw`bg-black rounded-2xl border border-neutral-800 p-3 flex-row items-center`}>
-                      <TextInput 
-                        keyboardType="numeric" 
-                        value={r.toString()} 
-                        onChangeText={v => {
-                          const newRpm = [...tableRpm];
-                          newRpm[i] = parseInt(v) || 0;
-                          setTableRpm(newRpm);
-                        }}
-                        style={tw`flex-1 text-white font-mono text-lg font-black`}
-                      />
-                    </View>
-                  </View>
-                  <View style={tw`w-32`}>
-                    <Text style={tw`text-neutral-600 text-[9px] font-black uppercase mb-2 ml-1`}>Kill (ms)</Text>
-                    <View style={tw`bg-black rounded-2xl border border-neutral-800 p-3 flex-row items-center`}>
-                      <TextInput 
-                        keyboardType="numeric" 
-                        value={tableKill[i].toString()} 
-                        onChangeText={v => {
-                          const newKill = [...tableKill];
-                          newKill[i] = parseInt(v) || 0;
-                          setTableKill(newKill);
-                        }}
-                        style={tw`flex-1 text-red-500 font-mono text-lg font-black text-center`}
-                      />
-                    </View>
-                  </View>
-                </View>
+            <View style={tw`bg-neutral-900 p-5 rounded-3xl border border-neutral-800 mb-6`}>
+              <Text style={tw`text-neutral-500 text-[10px] font-black uppercase mb-6 tracking-widest`}>Kill Time Configuration</Text>
+              
+              <View style={tw`flex-row mb-2 px-2`}>
+                <Text style={tw`flex-1 text-neutral-600 text-[9px] font-black uppercase`}>Stage</Text>
+                <Text style={tw`flex-1 text-neutral-600 text-[9px] font-black uppercase text-center`}>RPM Trigger</Text>
+                <Text style={tw`w-24 text-neutral-600 text-[9px] font-black uppercase text-right`}>Kill (ms)</Text>
               </View>
-            ))}
+
+              {tableRpm.map((r, i) => (
+                <View key={i} style={tw`flex-row items-center bg-black rounded-2xl border border-neutral-800 p-3 mb-2`}>
+                  <Text style={tw`flex-1 text-red-500 font-black italic text-xs`}>S{i+1}</Text>
+                  <TextInput 
+                    keyboardType="numeric" 
+                    value={r.toString()} 
+                    onChangeText={v => {
+                      const newRpm = [...tableRpm];
+                      newRpm[i] = parseInt(v) || 0;
+                      setTableRpm(newRpm);
+                    }}
+                    style={tw`flex-1 text-white font-mono text-center font-bold`}
+                  />
+                  <TextInput 
+                    keyboardType="numeric" 
+                    value={tableKill[i].toString()} 
+                    onChangeText={v => {
+                      const newKill = [...tableKill];
+                      newKill[i] = parseInt(v) || 0;
+                      setTableKill(newKill);
+                    }}
+                    style={tw`w-24 text-red-500 font-mono text-right font-bold`}
+                  />
+                </View>
+              ))}
+            </View>
 
             <TouchableOpacity 
               onPress={handleSave}
               disabled={isSaving}
-              style={tw`bg-red-600 py-5 rounded-3xl items-center flex-row justify-center shadow-lg shadow-red-900/40 mt-4`}
+              style={tw`bg-red-600 py-5 rounded-3xl items-center flex-row justify-center shadow-lg shadow-red-900/40 mt-2`}
             >
               {isSaving ? <ActivityIndicator color="white" style={tw`mr-2`} /> : <Save size={20} color="white" style={tw`mr-2`} />}
               <Text style={tw`text-white font-black uppercase tracking-widest`}>
-                {isSaving ? 'FLASHING ECU...' : 'FLASH TO ECU'}
+                {isSaving ? 'APPLYING...' : 'APPLY SETTING'}
               </Text>
             </TouchableOpacity>
           </View>
