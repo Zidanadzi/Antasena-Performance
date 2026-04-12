@@ -59,8 +59,7 @@
         {
           "locationAlwaysPermission": "Allow Antasena Performance to use your location."
         }
-      ],
-      "react-native-bluetooth-classic"
+      ]
     ],
     "extra": {
       "eas": {
