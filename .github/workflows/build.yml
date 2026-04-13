@@ -41,15 +41,13 @@ jobs:
           cp -r custom_backup/lib .
           cp custom_backup/pubspec.yaml .
           
-          # 4. Fix Android Build Configuration (ROBUST PATCHING)
-          echo "Patching Android configurations..."
-          
-          # Patch the main app
+          # 4. Fix Android Build Configuration
+          echo "Fixing Android build.gradle..."
           sed -i 's/compileSdkVersion flutter.compileSdkVersion/compileSdkVersion 34/g' android/app/build.gradle
           sed -i 's/targetSdkVersion flutter.targetSdkVersion/targetSdkVersion 34/g' android/app/build.gradle
           sed -i 's/minSdkVersion flutter.minSdkVersion/minSdkVersion 21/g' android/app/build.gradle
           
-          # Ensure local.properties has the values as a fallback
+          # Ensure local.properties is correctly populated
           echo "flutter.compileSdkVersion=34" >> android/local.properties
           echo "flutter.targetSdkVersion=34" >> android/local.properties
           echo "flutter.minSdkVersion=21" >> android/local.properties
@@ -57,12 +55,8 @@ jobs:
           # 5. Get dependencies
           flutter pub get
           
-          # 6. BRUTE FORCE PATCH for all plugins in pub-cache
-          # This fixes the "unknown property flutter" error by replacing it with hardcoded values
-          echo "Patching plugins in pub-cache..."
-          find /home/runner/.pub-cache -name "build.gradle" -type f -exec sed -i 's/flutter.compileSdkVersion/34/g' {} +
-          find /home/runner/.pub-cache -name "build.gradle" -type f -exec sed -i 's/flutter.targetSdkVersion/34/g' {} +
-          find /home/runner/.pub-cache -name "build.gradle" -type f -exec sed -i 's/flutter.minSdkVersion/21/g' {} +
+          # 6. Analyze code (to catch Dart errors early)
+          flutter analyze
           
           # 7. Build APK
           flutter build apk --release

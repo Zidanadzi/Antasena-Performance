@@ -3,11 +3,8 @@ import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
 import 'dart:async';
-import 'dart:math' as math;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:geolocator/geolocator.dart';
-import 'package:flutter_blue_plus/flutter_blue_plus.dart';
-import 'package:permission_handler/permission_handler.dart';
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
@@ -121,6 +118,11 @@ class AppState extends ChangeNotifier {
     _stopwatch.reset();
     _timer?.cancel();
     runMetrics = {'0-100': '--', '201m': '--', '402m': '--'};
+    notifyListeners();
+  }
+
+  void setRpmCalibration(double val) {
+    rpmCalibration = val;
     notifyListeners();
   }
 
@@ -559,8 +561,7 @@ class TuningScreen extends StatelessWidget {
               return Expanded(
                 child: GestureDetector(
                   onTap: () {
-                    state.rpmCalibration = val;
-                    state.notifyListeners();
+                    state.setRpmCalibration(val);
                   },
                   child: Container(
                     margin: const EdgeInsets.symmetric(horizontal: 4),
