@@ -209,65 +209,57 @@ class DashboardScreen extends StatelessWidget {
     
     return SafeArea(
       child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 24.0),
+        padding: const EdgeInsets.symmetric(horizontal: 20.0),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const SizedBox(height: 20),
+            const SizedBox(height: 24),
+            // Header
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
                 Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text('ANTASENA', style: GoogleFonts.inter(fontWeight: FontWeight.black, fontStyle: FontStyle.italic, fontSize: 20, letterSpacing: -1)),
-                    Text('PERFORMANCE', style: GoogleFonts.inter(fontWeight: FontWeight.black, fontSize: 10, color: const Color(0xFFEF4444), letterSpacing: 2)),
+                    Text('ANTASENA', style: GoogleFonts.inter(fontWeight: FontWeight.black, fontStyle: FontStyle.italic, fontSize: 22, letterSpacing: -1.5)),
+                    Text('PERFORMANCE', style: GoogleFonts.inter(fontWeight: FontWeight.black, fontSize: 11, color: const Color(0xFFEF4444), letterSpacing: 3)),
                   ],
                 ),
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 12, py: 6),
-                  decoration: BoxDecoration(
-                    color: Colors.white.withOpacity(0.05),
-                    borderRadius: BorderRadius.circular(20),
-                    border: Border.all(color: Colors.white.withOpacity(0.05)),
-                  ),
-                  child: Row(
-                    children: [
-                      Icon(Icons.bluetooth, size: 14, color: state.isConnected ? const Color(0xFF10B981) : const Color(0xFFEF4444)),
-                      const SizedBox(width: 6),
-                      Text(state.isConnected ? 'LIVE' : 'CONNECT', style: const TextStyle(fontSize: 10, fontWeight: FontWeight.black)),
-                    ],
-                  ),
-                ),
+                _buildStatusBadge(state),
               ],
             ),
-            const SizedBox(height: 40),
+            const SizedBox(height: 32),
             
-            // RPM Gauge (Minimalist Tech)
+            // Main Gauge Card
             Container(
               width: double.infinity,
               padding: const EdgeInsets.all(24),
               decoration: BoxDecoration(
-                color: const Color(0xFF121212),
-                borderRadius: BorderRadius.circular(32),
+                color: const Color(0xFF111111),
+                borderRadius: BorderRadius.circular(28),
                 border: Border.all(color: Colors.white.withOpacity(0.05)),
+                boxShadow: [
+                  BoxShadow(color: Colors.black.withOpacity(0.5), blurRadius: 20, offset: const Offset(0, 10)),
+                ],
               ),
               child: Column(
                 children: [
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Text('ENGINE RPM', style: TextStyle(color: Colors.white.withOpacity(0.3), fontSize: 9, fontWeight: FontWeight.bold, letterSpacing: 1.5)),
+                          Text('ENGINE RPM', style: GoogleFonts.inter(color: Colors.white.withOpacity(0.4), fontSize: 9, fontWeight: FontWeight.black, letterSpacing: 1.5)),
+                          const SizedBox(height: 4),
                           Row(
                             crossAxisAlignment: CrossAxisAlignment.baseline,
                             textBaseline: TextBaseline.alphabetic,
                             children: [
-                              Text(state.rpm.toString(), style: GoogleFonts.jetBrainsMono(fontSize: 48, fontWeight: FontWeight.bold)),
-                              const SizedBox(width: 8),
-                              Text('RPM', style: TextStyle(color: Colors.white.withOpacity(0.2), fontSize: 12, fontWeight: FontWeight.bold)),
+                              Text(state.rpm.toString(), style: GoogleFonts.jetBrainsMono(fontSize: 52, fontWeight: FontWeight.black, letterSpacing: -2)),
+                              const SizedBox(width: 6),
+                              Text('RPM', style: GoogleFonts.inter(color: Colors.white.withOpacity(0.2), fontSize: 12, fontWeight: FontWeight.black)),
                             ],
                           ),
                         ],
@@ -275,41 +267,56 @@ class DashboardScreen extends StatelessWidget {
                       Column(
                         crossAxisAlignment: CrossAxisAlignment.end,
                         children: [
-                          Text('GPS SPEED', style: TextStyle(color: Colors.white.withOpacity(0.3), fontSize: 9, fontWeight: FontWeight.bold, letterSpacing: 1.5)),
+                          Text('GPS SPEED', style: GoogleFonts.inter(color: Colors.white.withOpacity(0.4), fontSize: 9, fontWeight: FontWeight.black, letterSpacing: 1.5)),
+                          const SizedBox(height: 4),
                           Row(
                             crossAxisAlignment: CrossAxisAlignment.baseline,
                             textBaseline: TextBaseline.alphabetic,
                             children: [
-                              Text(state.speed.round().toString(), style: GoogleFonts.jetBrainsMono(fontSize: 36, fontWeight: FontWeight.bold, color: const Color(0xFFEF4444))),
+                              Text(state.speed.round().toString(), style: GoogleFonts.jetBrainsMono(fontSize: 42, fontWeight: FontWeight.black, color: const Color(0xFFEF4444), letterSpacing: -1)),
                               const SizedBox(width: 4),
-                              Text('KM/H', style: TextStyle(color: Colors.white.withOpacity(0.2), fontSize: 10, fontWeight: FontWeight.bold)),
+                              Text('KM/H', style: GoogleFonts.inter(color: Colors.white.withOpacity(0.2), fontSize: 10, fontWeight: FontWeight.black)),
                             ],
                           ),
                         ],
                       ),
                     ],
                   ),
-                  const SizedBox(height: 30),
-                  // Horizontal RPM Bar
+                  const SizedBox(height: 32),
+                  // Segmented RPM Bar
                   SizedBox(
-                    height: 8,
+                    height: 32,
                     child: Row(
                       children: List.generate(24, (index) {
                         double threshold = (index / 24) * 14000;
                         bool isActive = state.rpm > threshold;
+                        
                         Color color = Colors.white.withOpacity(0.05);
+                        List<BoxShadow> shadows = [];
+                        
                         if (isActive) {
-                          if (index < 14) color = const Color(0xFF10B981);
-                          else if (index < 20) color = const Color(0xFFFACC15);
-                          else color = const Color(0xFFEF4444);
+                          if (index < 12) {
+                            color = const Color(0xFF10B981);
+                            shadows = [BoxShadow(color: color.withOpacity(0.6), blurRadius: 12)];
+                          } else if (index < 18) {
+                            color = const Color(0xFFFACC15);
+                            shadows = [BoxShadow(color: color.withOpacity(0.6), blurRadius: 12)];
+                          } else if (index < 22) {
+                            color = const Color(0xFFF97316);
+                            shadows = [BoxShadow(color: color.withOpacity(0.6), blurRadius: 12)];
+                          } else {
+                            color = const Color(0xFFEF4444);
+                            shadows = [BoxShadow(color: color.withOpacity(0.8), blurRadius: 15)];
+                          }
                         }
+                        
                         return Expanded(
                           child: Container(
-                            margin: const EdgeInsets.symmetric(horizontal: 1),
+                            margin: const EdgeInsets.symmetric(horizontal: 1.5),
                             decoration: BoxDecoration(
                               color: color,
-                              borderRadius: BorderRadius.circular(2),
-                              boxShadow: isActive ? [BoxShadow(color: color.withOpacity(0.5), blurRadius: 8, spreadRadius: 1)] : [],
+                              borderRadius: BorderRadius.circular(3),
+                              boxShadow: shadows,
                             ),
                           ),
                         );
@@ -320,17 +327,63 @@ class DashboardScreen extends StatelessWidget {
               ),
             ),
             
-            const SizedBox(height: 24),
+            const SizedBox(height: 20),
+            // Secondary Stats
             Row(
               children: [
                 Expanded(
-                  child: _buildInfoCard('RPM MINIMUM', '${state.minRpm.round()}', 'RPM', Icons.show_chart),
+                  child: _buildStatCard('MIN RPM', '${state.minRpm.round()}', 'RPM', Icons.keyboard_double_arrow_up),
                 ),
                 const SizedBox(width: 16),
                 Expanded(
-                  child: _buildInfoCard('ACTIVE CUT', '${state.rpm > state.minRpm ? state.tableKill[0] : 0}', 'MS', Icons.bolt, color: const Color(0xFFEF4444)),
+                  child: _buildStatCard('CALIBRATION', 'x${state.rpmCalibration.toStringAsFixed(1)}', 'VAL', Icons.settings_input_component, color: const Color(0xFFEF4444)),
                 ),
               ],
+            ),
+            
+            const SizedBox(height: 20),
+            // Connection Info
+            Container(
+              padding: const EdgeInsets.all(20),
+              decoration: BoxDecoration(
+                color: const Color(0xFF111111),
+                borderRadius: BorderRadius.circular(24),
+                border: Border.all(color: Colors.white.withOpacity(0.05)),
+              ),
+              child: Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(10),
+                    decoration: BoxDecoration(
+                      color: (state.isConnected ? const Color(0xFF10B981) : const Color(0xFFEF4444)).withOpacity(0.1),
+                      shape: BoxShape.circle,
+                    ),
+                    child: Icon(state.isConnected ? Icons.bluetooth_connected : Icons.bluetooth_disabled, size: 18, color: state.isConnected ? const Color(0xFF10B981) : const Color(0xFFEF4444)),
+                  ),
+                  const SizedBox(width: 16),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text('DEVICE STATUS', style: GoogleFonts.inter(color: Colors.white.withOpacity(0.3), fontSize: 8, fontWeight: FontWeight.black, letterSpacing: 1)),
+                        const SizedBox(height: 2),
+                        Text(state.isConnected ? (state.connectedDeviceName ?? 'CONNECTED') : 'DISCONNECTED', style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.bold)),
+                      ],
+                    ),
+                  ),
+                  if (!state.isConnected)
+                    ElevatedButton(
+                      onPressed: () {},
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: const Color(0xFFEF4444),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                        elevation: 0,
+                      ),
+                      child: const Text('SCAN', style: TextStyle(fontSize: 10, fontWeight: FontWeight.black)),
+                    ),
+                ],
+              ),
             ),
           ],
         ),
@@ -338,32 +391,56 @@ class DashboardScreen extends StatelessWidget {
     );
   }
 
-  Widget _buildInfoCard(String label, String value, String unit, IconData icon, {Color? color}) {
+  Widget _buildStatusBadge(AppState state) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+      decoration: BoxDecoration(
+        color: Colors.white.withOpacity(0.03),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: Colors.white.withOpacity(0.05)),
+      ),
+      child: Row(
+        children: [
+          Container(
+            width: 6,
+            height: 6,
+            decoration: BoxDecoration(
+              color: state.isConnected ? const Color(0xFF10B981) : const Color(0xFFEF4444),
+              shape: BoxShape.circle,
+              boxShadow: [
+                BoxShadow(color: (state.isConnected ? const Color(0xFF10B981) : const Color(0xFFEF4444)).withOpacity(0.5), blurRadius: 4),
+              ],
+            ),
+          ),
+          const SizedBox(width: 8),
+          Text(state.isConnected ? 'LIVE' : 'OFFLINE', style: GoogleFonts.inter(fontSize: 10, fontWeight: FontWeight.black, letterSpacing: 1)),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildStatCard(String label, String value, String unit, IconData icon, {Color? color}) {
     return Container(
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
-        color: const Color(0xFF121212),
+        color: const Color(0xFF111111),
         borderRadius: BorderRadius.circular(24),
         border: Border.all(color: Colors.white.withOpacity(0.05)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
-            children: [
-              Icon(icon, size: 12, color: Colors.white.withOpacity(0.2)),
-              const SizedBox(width: 6),
-              Text(label, style: TextStyle(color: Colors.white.withOpacity(0.3), fontSize: 9, fontWeight: FontWeight.bold)),
-            ],
-          ),
-          const SizedBox(height: 12),
+          Icon(icon, size: 14, color: Colors.white.withOpacity(0.2)),
+          const SizedBox(height: 16),
+          Text(label, style: GoogleFonts.inter(color: Colors.white.withOpacity(0.3), fontSize: 8, fontWeight: FontWeight.black, letterSpacing: 1)),
+          const SizedBox(height: 4),
           Row(
             crossAxisAlignment: CrossAxisAlignment.baseline,
             textBaseline: TextBaseline.alphabetic,
             children: [
-              Text(value, style: GoogleFonts.jetBrainsMono(fontSize: 24, fontWeight: FontWeight.bold, color: color)),
+              Text(value, style: GoogleFonts.jetBrainsMono(fontSize: 22, fontWeight: FontWeight.black, color: color)),
               const SizedBox(width: 4),
-              Text(unit, style: TextStyle(color: Colors.white.withOpacity(0.1), fontSize: 10, fontWeight: FontWeight.bold)),
+              Text(unit, style: GoogleFonts.inter(color: Colors.white.withOpacity(0.1), fontSize: 9, fontWeight: FontWeight.black)),
             ],
           ),
         ],
