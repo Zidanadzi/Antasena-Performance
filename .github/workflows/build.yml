@@ -29,6 +29,12 @@ jobs:
       - name: Initialize Flutter Project
         run: |
           flutter create . --project-name antasena_performance --org com.antasena.performance --overwrite
+          # Backup our custom main.dart
+          cp lib/main.dart lib/main.dart.bak
+          # Ensure directories exist
+          mkdir -p lib
+          # Restore our custom main.dart over the default one
+          mv lib/main.dart.bak lib/main.dart
           flutter pub get
           flutter build apk --release
 
