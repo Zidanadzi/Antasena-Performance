@@ -28,20 +28,13 @@ jobs:
 
       - name: Initialize Flutter Project
         run: |
-          # 1. Backup our custom code
-          mkdir -p custom_backup
-          cp -r lib custom_backup/
-          cp pubspec.yaml custom_backup/
+          # 1. Clean and Setup
+          rm -rf android ios web linux macos windows
           
           # 2. Create the flutter project structure
           flutter create . --project-name antasena_performance --org com.antasena.performance --overwrite
           
-          # 3. Restore our custom code
-          rm -rf lib
-          cp -r custom_backup/lib .
-          cp custom_backup/pubspec.yaml .
-          
-          # 4. Fix Android Build Configuration
+          # 3. Fix Android Build Configuration
           echo "Fixing Android build.gradle..."
           sed -i 's/compileSdkVersion flutter.compileSdkVersion/compileSdkVersion 34/g' android/app/build.gradle
           sed -i 's/targetSdkVersion flutter.targetSdkVersion/targetSdkVersion 34/g' android/app/build.gradle
@@ -52,13 +45,11 @@ jobs:
           echo "flutter.targetSdkVersion=34" >> android/local.properties
           echo "flutter.minSdkVersion=21" >> android/local.properties
           
-          # 5. Get dependencies
+          # 4. Get dependencies and analyze
           flutter pub get
-          
-          # 6. Analyze code (to catch Dart errors early)
           flutter analyze
           
-          # 7. Build APK
+          # 5. Build APK
           flutter build apk --release
 
       - name: Upload APK to Mirror (BashUpload)

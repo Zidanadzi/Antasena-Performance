@@ -1,5 +1,5 @@
 {
-  "name": "Antasena Flutter",
-  "description": "Aplikasi dashboard untuk konfigurasi dan tuning modul quick shifter motor.",
-  "requestFramePermissions": ["geolocation"]
+  "name": "Antasena Performance",
+  "description": "High-performance motorcycle dashboard and quickshifter tuning system.",
+  "requestFramePermissions": ["geolocation", "bluetooth"]
 }
