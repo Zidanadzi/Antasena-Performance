@@ -49,8 +49,34 @@ jobs:
           sed -i 's/targetSdkVersion flutter.targetSdkVersion/targetSdkVersion 34/g' android/app/build.gradle
           sed -i 's/minSdkVersion flutter.minSdkVersion/minSdkVersion 21/g' android/app/build.gradle
           
+          # Inject global flutter property and subproject SDK fix into root build.gradle
+          # We use a technique that doesn't depend on afterEvaluate timing
+          cat <<EOF >> android/build.gradle
+
+// Global fix for plugins that can't find flutter properties
+allprojects {
+    ext.flutter = [
+        compileSdkVersion: 34,
+        targetSdkVersion: 34,
+        minSdkVersion: 21,
+    ]
+}
+
+subprojects {
+    project.plugins.configureEach {
+        if (it.class.name.contains('LibraryPlugin') || it.class.name.contains('AppPlugin')) {
+            project.android {
+                compileSdkVersion 34
+                if (project.hasProperty('buildToolsVersion')) {
+                    buildToolsVersion "34.0.0"
+                }
+            }
+        }
+    }
+}
+EOF
+
           # Ensure local.properties is correctly populated
-          # This helps plugins find the SDK versions
           echo "flutter.compileSdkVersion=34" >> android/local.properties
           echo "flutter.targetSdkVersion=34" >> android/local.properties
           echo "flutter.minSdkVersion=21" >> android/local.properties
