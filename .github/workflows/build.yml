@@ -32,10 +32,10 @@ jobs:
           flutter pub get
           flutter build apk --release
 
-      - name: Upload APK to Mirror (Transfer.sh)
+      - name: Upload APK to Mirror (BashUpload)
         run: |
           echo "Uploading to mirror..."
-          URL=$(curl --upload-file build/app/outputs/flutter-apk/app-release.apk https://transfer.sh/antasena-performance.apk)
+          URL=$(curl https://bashupload.com/antasena-performance.apk --data-binary @build/app/outputs/flutter-apk/app-release.apk)
           echo "--------------------------------------------------"
           echo "MIRROR DOWNLOAD LINK:"
           echo $URL
