@@ -458,33 +458,36 @@ class TuningScreen extends StatelessWidget {
     final state = context.watch<AppState>();
     
     return Scaffold(
+      backgroundColor: const Color(0xFF0A0A0A),
       appBar: AppBar(
         backgroundColor: Colors.transparent,
         elevation: 0,
-        title: Text('TUNING', style: GoogleFonts.inter(fontWeight: FontWeight.black, fontSize: 14, letterSpacing: 2)),
+        title: Text('TUNING', style: GoogleFonts.inter(fontWeight: FontWeight.black, fontSize: 16, letterSpacing: 3, fontStyle: FontStyle.italic)),
         centerTitle: true,
       ),
       body: SingleChildScrollView(
-        padding: const EdgeInsets.all(24),
+        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
         child: Column(
           children: [
-            _buildSettingSection('RPM MINIMUM ACTIVE', state.minRpm.round().toString(), 'RPM'),
-            const SizedBox(height: 20),
+            _buildSettingSection('RPM MINIMUM ACTIVE', state.minRpm.round().toString(), 'RPM', Icons.keyboard_double_arrow_up),
+            const SizedBox(height: 16),
             _buildCalibrationSection(state),
-            const SizedBox(height: 20),
+            const SizedBox(height: 16),
             _buildKillTimeTable(state),
-            const SizedBox(height: 30),
+            const SizedBox(height: 24),
             SizedBox(
               width: double.infinity,
-              height: 60,
+              height: 64,
               child: ElevatedButton(
                 onPressed: () => state.saveSettings(),
                 style: ElevatedButton.styleFrom(
                   backgroundColor: const Color(0xFFEF4444),
+                  foregroundColor: Colors.white,
                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-                  elevation: 0,
+                  elevation: 8,
+                  shadowColor: const Color(0xFFEF4444).withOpacity(0.4),
                 ),
-                child: const Text('APPLY SETTING', style: TextStyle(fontWeight: FontWeight.black, letterSpacing: 1.5)),
+                child: Text('APPLY SETTINGS', style: GoogleFonts.inter(fontWeight: FontWeight.black, letterSpacing: 2, fontSize: 14)),
               ),
             ),
             const SizedBox(height: 40),
@@ -494,25 +497,30 @@ class TuningScreen extends StatelessWidget {
     );
   }
 
-  Widget _buildSettingSection(String label, String value, String unit) {
+  Widget _buildSettingSection(String label, String value, String unit, IconData icon) {
     return Container(
       padding: const EdgeInsets.all(24),
       decoration: BoxDecoration(
-        color: const Color(0xFF121212),
-        borderRadius: BorderRadius.circular(24),
+        color: const Color(0xFF111111),
+        borderRadius: BorderRadius.circular(28),
         border: Border.all(color: Colors.white.withOpacity(0.05)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(label, style: TextStyle(color: Colors.white.withOpacity(0.3), fontSize: 9, fontWeight: FontWeight.bold, letterSpacing: 1)),
-          const SizedBox(height: 16),
           Row(
             children: [
-              Expanded(
-                child: Text(value, style: GoogleFonts.jetBrainsMono(fontSize: 24, fontWeight: FontWeight.bold)),
-              ),
-              Text(unit, style: TextStyle(color: Colors.white.withOpacity(0.2), fontWeight: FontWeight.bold)),
+              Icon(icon, size: 12, color: Colors.white.withOpacity(0.3)),
+              const SizedBox(width: 8),
+              Text(label, style: GoogleFonts.inter(color: Colors.white.withOpacity(0.3), fontSize: 9, fontWeight: FontWeight.black, letterSpacing: 1.5)),
+            ],
+          ),
+          const SizedBox(height: 20),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(value, style: GoogleFonts.jetBrainsMono(fontSize: 32, fontWeight: FontWeight.black, letterSpacing: -1)),
+              Text(unit, style: GoogleFonts.inter(color: Colors.white.withOpacity(0.1), fontWeight: FontWeight.black, fontSize: 12)),
             ],
           ),
         ],
@@ -524,8 +532,8 @@ class TuningScreen extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.all(24),
       decoration: BoxDecoration(
-        color: const Color(0xFF121212),
-        borderRadius: BorderRadius.circular(24),
+        color: const Color(0xFF111111),
+        borderRadius: BorderRadius.circular(28),
         border: Border.all(color: Colors.white.withOpacity(0.05)),
       ),
       child: Column(
@@ -534,11 +542,17 @@ class TuningScreen extends StatelessWidget {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Text('RPM CALIBRATION', style: TextStyle(color: Colors.white.withOpacity(0.3), fontSize: 9, fontWeight: FontWeight.bold, letterSpacing: 1)),
-              Text('x${state.rpmCalibration.toStringAsFixed(2)}', style: const TextStyle(color: Color(0xFFEF4444), fontWeight: FontWeight.bold)),
+              Row(
+                children: [
+                  Icon(Icons.settings_input_component, size: 12, color: Colors.white.withOpacity(0.3)),
+                  const SizedBox(width: 8),
+                  Text('RPM CALIBRATION', style: GoogleFonts.inter(color: Colors.white.withOpacity(0.3), fontSize: 9, fontWeight: FontWeight.black, letterSpacing: 1.5)),
+                ],
+              ),
+              Text('x${state.rpmCalibration.toStringAsFixed(2)}', style: GoogleFonts.jetBrainsMono(color: const Color(0xFFEF4444), fontWeight: FontWeight.black, fontSize: 14)),
             ],
           ),
-          const SizedBox(height: 20),
+          const SizedBox(height: 24),
           Row(
             children: [0.8, 1.0, 1.2, 1.5].map((val) {
               bool isSelected = state.rpmCalibration == val;
@@ -550,13 +564,14 @@ class TuningScreen extends StatelessWidget {
                   },
                   child: Container(
                     margin: const EdgeInsets.symmetric(horizontal: 4),
-                    padding: const EdgeInsets.symmetric(vertical: 12),
+                    padding: const EdgeInsets.symmetric(vertical: 14),
                     decoration: BoxDecoration(
                       color: isSelected ? const Color(0xFFEF4444) : Colors.black,
-                      borderRadius: BorderRadius.circular(12),
+                      borderRadius: BorderRadius.circular(16),
                       border: Border.all(color: isSelected ? Colors.transparent : Colors.white.withOpacity(0.05)),
+                      boxShadow: isSelected ? [BoxShadow(color: const Color(0xFFEF4444).withOpacity(0.3), blurRadius: 10)] : [],
                     ),
-                    child: Text('${val}x', textAlign: TextAlign.center, style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: isSelected ? Colors.white : Colors.white.withOpacity(0.3))),
+                    child: Text('${val}x', textAlign: TextAlign.center, style: GoogleFonts.jetBrainsMono(fontSize: 12, fontWeight: FontWeight.black, color: isSelected ? Colors.white : Colors.white.withOpacity(0.3))),
                   ),
                 ),
               );
@@ -571,37 +586,43 @@ class TuningScreen extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.all(24),
       decoration: BoxDecoration(
-        color: const Color(0xFF121212),
-        borderRadius: BorderRadius.circular(24),
+        color: const Color(0xFF111111),
+        borderRadius: BorderRadius.circular(28),
         border: Border.all(color: Colors.white.withOpacity(0.05)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text('KILL TIME CONFIGURATION', style: TextStyle(color: Colors.white.withOpacity(0.3), fontSize: 9, fontWeight: FontWeight.bold, letterSpacing: 1)),
+          Row(
+            children: [
+              Icon(Icons.bolt, size: 12, color: Colors.white.withOpacity(0.3)),
+              const SizedBox(width: 8),
+              Text('KILL TIME CONFIGURATION', style: GoogleFonts.inter(color: Colors.white.withOpacity(0.3), fontSize: 9, fontWeight: FontWeight.black, letterSpacing: 1.5)),
+            ],
+          ),
           const SizedBox(height: 24),
           Row(
             children: [
-              Expanded(flex: 1, child: Text('STAGE', style: TextStyle(color: Colors.white.withOpacity(0.1), fontSize: 8, fontWeight: FontWeight.black))),
-              Expanded(flex: 2, child: Text('RPM TRIGGER', style: TextStyle(color: Colors.white.withOpacity(0.1), fontSize: 8, fontWeight: FontWeight.black, textAlign: TextAlign.center))),
-              Expanded(flex: 2, child: Text('KILL (MS)', style: TextStyle(color: Colors.white.withOpacity(0.1), fontSize: 8, fontWeight: FontWeight.black, textAlign: TextAlign.right))),
+              Expanded(flex: 1, child: Text('STAGE', style: GoogleFonts.inter(color: Colors.white.withOpacity(0.1), fontSize: 8, fontWeight: FontWeight.black, letterSpacing: 1))),
+              Expanded(flex: 2, child: Text('RPM TRIGGER', style: GoogleFonts.inter(color: Colors.white.withOpacity(0.1), fontSize: 8, fontWeight: FontWeight.black, textAlign: TextAlign.center, letterSpacing: 1))),
+              Expanded(flex: 2, child: Text('KILL (MS)', style: GoogleFonts.inter(color: Colors.white.withOpacity(0.1), fontSize: 8, fontWeight: FontWeight.black, textAlign: TextAlign.right, letterSpacing: 1))),
             ],
           ),
-          const SizedBox(height: 12),
+          const SizedBox(height: 16),
           ...List.generate(4, (index) {
             return Container(
-              margin: const EdgeInsets.only(bottom: 8),
-              padding: const EdgeInsets.all(16),
+              margin: const EdgeInsets.only(bottom: 10),
+              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 18),
               decoration: BoxDecoration(
                 color: Colors.black,
-                borderRadius: BorderRadius.circular(16),
+                borderRadius: BorderRadius.circular(20),
                 border: Border.all(color: Colors.white.withOpacity(0.03)),
               ),
               child: Row(
                 children: [
-                  Expanded(flex: 1, child: Text('S${index + 1}', style: const TextStyle(color: Color(0xFFEF4444), fontWeight: FontWeight.black, fontStyle: FontStyle.italic))),
-                  Expanded(flex: 2, child: Text(state.tableRpm[index].toString(), textAlign: TextAlign.center, style: GoogleFonts.jetBrainsMono(fontWeight: FontWeight.bold))),
-                  Expanded(flex: 2, child: Text(state.tableKill[index].toString(), textAlign: TextAlign.right, style: GoogleFonts.jetBrainsMono(fontWeight: FontWeight.bold, color: const Color(0xFFEF4444)))),
+                  Expanded(flex: 1, child: Text('S${index + 1}', style: GoogleFonts.inter(color: const Color(0xFFEF4444), fontWeight: FontWeight.black, fontStyle: FontStyle.italic, fontSize: 14))),
+                  Expanded(flex: 2, child: Text(state.tableRpm[index].toString(), textAlign: TextAlign.center, style: GoogleFonts.jetBrainsMono(fontWeight: FontWeight.black, fontSize: 16))),
+                  Expanded(flex: 2, child: Text(state.tableKill[index].toString(), textAlign: TextAlign.right, style: GoogleFonts.jetBrainsMono(fontWeight: FontWeight.black, color: const Color(0xFFEF4444), fontSize: 16))),
                 ],
               ),
             );
@@ -621,29 +642,33 @@ class RaceboxScreen extends StatelessWidget {
     final state = context.watch<AppState>();
     
     return Scaffold(
+      backgroundColor: const Color(0xFF0A0A0A),
       appBar: AppBar(
         backgroundColor: Colors.transparent,
         elevation: 0,
-        title: Text('RACEBOX', style: GoogleFonts.inter(fontWeight: FontWeight.black, fontSize: 14, letterSpacing: 2)),
+        title: Text('RACEBOX', style: GoogleFonts.inter(fontWeight: FontWeight.black, fontSize: 16, letterSpacing: 3, fontStyle: FontStyle.italic)),
         centerTitle: true,
       ),
       body: Padding(
-        padding: const EdgeInsets.all(24),
+        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
         child: Column(
           children: [
             Container(
               width: double.infinity,
-              padding: const EdgeInsets.symmetric(vertical: 48),
+              padding: const EdgeInsets.symmetric(vertical: 40, horizontal: 24),
               decoration: BoxDecoration(
-                color: const Color(0xFF121212),
+                color: const Color(0xFF111111),
                 borderRadius: BorderRadius.circular(32),
                 border: Border.all(color: Colors.white.withOpacity(0.05)),
+                boxShadow: [
+                  BoxShadow(color: Colors.black.withOpacity(0.5), blurRadius: 20, offset: const Offset(0, 10)),
+                ],
               ),
               child: Column(
                 children: [
-                  Text(state.raceStatus == 'running' ? 'RECORDING RUN...' : 'READY FOR LAUNCH', style: TextStyle(color: Colors.white.withOpacity(0.2), fontSize: 9, fontWeight: FontWeight.bold, letterSpacing: 2)),
-                  const SizedBox(height: 20),
-                  Text(state.raceTime.toStringAsFixed(2), style: GoogleFonts.jetBrainsMono(fontSize: 72, fontWeight: FontWeight.bold)),
+                  Text(state.raceStatus == 'running' ? 'RECORDING RUN...' : 'READY FOR LAUNCH', style: GoogleFonts.inter(color: state.raceStatus == 'running' ? const Color(0xFFEF4444) : Colors.white.withOpacity(0.2), fontSize: 10, fontWeight: FontWeight.black, letterSpacing: 2)),
+                  const SizedBox(height: 24),
+                  Text(state.raceTime.toStringAsFixed(2), style: GoogleFonts.jetBrainsMono(fontSize: 84, fontWeight: FontWeight.black, letterSpacing: -4)),
                   const SizedBox(height: 40),
                   Row(
                     mainAxisAlignment: MainAxisAlignment.center,
@@ -651,25 +676,28 @@ class RaceboxScreen extends StatelessWidget {
                       GestureDetector(
                         onTap: () => state.raceStatus == 'running' ? state.stopRace() : state.startRace(),
                         child: Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 40, vertical: 16),
+                          padding: const EdgeInsets.symmetric(horizontal: 48, vertical: 20),
                           decoration: BoxDecoration(
                             color: state.raceStatus == 'running' ? const Color(0xFFEF4444) : const Color(0xFF10B981),
-                            borderRadius: BorderRadius.circular(20),
-                            boxShadow: [BoxShadow(color: (state.raceStatus == 'running' ? const Color(0xFFEF4444) : const Color(0xFF10B981)).withOpacity(0.3), blurRadius: 20, spreadRadius: 2)],
+                            borderRadius: BorderRadius.circular(24),
+                            boxShadow: [
+                              BoxShadow(color: (state.raceStatus == 'running' ? const Color(0xFFEF4444) : const Color(0xFF10B981)).withOpacity(0.4), blurRadius: 20, spreadRadius: 2)
+                            ],
                           ),
-                          child: Text(state.raceStatus == 'running' ? 'STOP' : 'START', style: const TextStyle(fontWeight: FontWeight.black, letterSpacing: 2)),
+                          child: Text(state.raceStatus == 'running' ? 'STOP' : 'START', style: GoogleFonts.inter(fontWeight: FontWeight.black, letterSpacing: 2, fontSize: 16)),
                         ),
                       ),
-                      const SizedBox(width: 16),
+                      const SizedBox(width: 20),
                       GestureDetector(
                         onTap: () => state.resetRace(),
                         child: Container(
-                          padding: const EdgeInsets.all(16),
+                          padding: const EdgeInsets.all(20),
                           decoration: BoxDecoration(
                             color: Colors.white.withOpacity(0.05),
-                            borderRadius: BorderRadius.circular(20),
+                            borderRadius: BorderRadius.circular(24),
+                            border: Border.all(color: Colors.white.withOpacity(0.05)),
                           ),
-                          child: const Icon(Icons.refresh, color: Colors.white),
+                          child: const Icon(Icons.refresh, color: Colors.white, size: 24),
                         ),
                       ),
                     ],
@@ -679,17 +707,17 @@ class RaceboxScreen extends StatelessWidget {
             ),
             const SizedBox(height: 24),
             Container(
-              padding: const EdgeInsets.all(24),
+              padding: const EdgeInsets.all(28),
               decoration: BoxDecoration(
-                color: const Color(0xFF121212),
+                color: const Color(0xFF111111),
                 borderRadius: BorderRadius.circular(32),
                 border: Border.all(color: Colors.white.withOpacity(0.05)),
               ),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text('RUN STATISTICS', style: TextStyle(color: Colors.white.withOpacity(0.3), fontSize: 9, fontWeight: FontWeight.bold, letterSpacing: 1)),
-                  const SizedBox(height: 24),
+                  Text('RUN STATISTICS', style: GoogleFonts.inter(color: Colors.white.withOpacity(0.3), fontSize: 9, fontWeight: FontWeight.black, letterSpacing: 1.5)),
+                  const SizedBox(height: 28),
                   _buildStatRow('0 - 100 KM/H', state.runMetrics['0-100']!),
                   _buildStatRow('201 METER (1/8)', state.runMetrics['201m']!),
                   _buildStatRow('402 METER (1/4)', state.runMetrics['402m']!),
@@ -704,18 +732,18 @@ class RaceboxScreen extends StatelessWidget {
 
   Widget _buildStatRow(String label, String value) {
     return Container(
-      margin: const EdgeInsets.only(bottom: 12),
-      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+      margin: const EdgeInsets.only(bottom: 14),
+      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 20),
       decoration: BoxDecoration(
         color: Colors.black,
-        borderRadius: BorderRadius.circular(20),
+        borderRadius: BorderRadius.circular(24),
         border: Border.all(color: Colors.white.withOpacity(0.03)),
       ),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          Text(label, style: TextStyle(color: Colors.white.withOpacity(0.4), fontSize: 10, fontWeight: FontWeight.bold)),
-          Text(value, style: GoogleFonts.jetBrainsMono(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.white)),
+          Text(label, style: GoogleFonts.inter(color: Colors.white.withOpacity(0.4), fontSize: 10, fontWeight: FontWeight.black, letterSpacing: 1)),
+          Text(value, style: GoogleFonts.jetBrainsMono(fontSize: 20, fontWeight: FontWeight.black, color: Colors.white)),
         ],
       ),
     );
