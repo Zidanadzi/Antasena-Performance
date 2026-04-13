@@ -65,6 +65,7 @@ export default function App() {
   const [connectionType, setConnectionType] = useState<'ble' | 'classic' | null>(null);
   const [connectedDevice, setConnectedDevice] = useState<Device | BluetoothDevice | null>(null);
   const [rpm, setRpm] = useState(0);
+  const [rpmCalibration, setRpmCalibration] = useState(1.0);
   const [activeTab, setActiveTab] = useState('dashboard');
   
   // Settings State
@@ -110,6 +111,8 @@ export default function App() {
         if (savedKill) setTableKill(JSON.parse(savedKill));
         const savedMin = await AsyncStorage.getItem('antasena_minRpm');
         if (savedMin) setMinRpm(parseInt(savedMin, 10));
+        const savedCal = await AsyncStorage.getItem('antasena_rpmCalibration');
+        if (savedCal) setRpmCalibration(parseFloat(savedCal));
       } catch (e) {
         console.error("Failed to load settings", e);
       }
@@ -179,20 +182,21 @@ export default function App() {
     return () => locationSubscription.current?.remove();
   }, [raceStatus, raceTime]);
 
-  // Race Timer (requestAnimationFrame for smoothness)
+  // Race Timer (High-precision using requestAnimationFrame)
   useEffect(() => {
+    let animationFrameId: number;
+    
     if (raceStatus === 'running') {
-      startTimeRef.current = performance.now() - raceTime;
-      const step = () => {
-        setRaceTime(performance.now() - startTimeRef.current);
-        raceTimerRef.current = requestAnimationFrame(step);
+      const start = performance.now() - raceTime;
+      const updateTimer = () => {
+        setRaceTime(performance.now() - start);
+        animationFrameId = requestAnimationFrame(updateTimer);
       };
-      raceTimerRef.current = requestAnimationFrame(step);
-    } else {
-      if (raceTimerRef.current) cancelAnimationFrame(raceTimerRef.current);
+      animationFrameId = requestAnimationFrame(updateTimer);
     }
+    
     return () => {
-      if (raceTimerRef.current) cancelAnimationFrame(raceTimerRef.current);
+      if (animationFrameId) cancelAnimationFrame(animationFrameId);
     };
   }, [raceStatus]);
 
@@ -292,7 +296,7 @@ export default function App() {
                 const parts = decoded.split(',');
                 if (parts.length >= 1) {
                   const val = parseInt(parts[0]);
-                  if (!isNaN(val)) setRpm(val);
+                  if (!isNaN(val)) setRpm(Math.round(val * rpmCalibration));
                 }
               }
             });
@@ -344,7 +348,7 @@ export default function App() {
             const parts = data.split(',');
             if (parts.length >= 1) {
               const val = parseInt(parts[0]);
-              if (!isNaN(val)) setRpm(val);
+              if (!isNaN(val)) setRpm(Math.round(val * rpmCalibration));
             }
           });
         }
@@ -365,6 +369,7 @@ export default function App() {
       await AsyncStorage.setItem('antasena_tableRpm', JSON.stringify(tableRpm));
       await AsyncStorage.setItem('antasena_tableKill', JSON.stringify(tableKill));
       await AsyncStorage.setItem('antasena_minRpm', minRpm.toString());
+      await AsyncStorage.setItem('antasena_rpmCalibration', rpmCalibration.toString());
 
       if (isConnected && connectedDevice) {
         const commands = [];
@@ -424,12 +429,15 @@ export default function App() {
         <View style={tw`flex-row gap-1 h-8`}>
           {Array.from({ length: segments }).map((_, i) => {
             const isActive = i < activeSegments;
-            let color = 'bg-neutral-800 opacity-30';
+            let color = 'bg-neutral-800 opacity-20';
+            
             if (isActive) {
-              if (i < 14) color = 'bg-emerald-500 shadow-[0_0_10px_#10b981] opacity-100';
-              else if (i < 20) color = 'bg-yellow-500 shadow-[0_0_10px_#f59e0b] opacity-100';
-              else color = 'bg-red-500 shadow-[0_0_10px_#ef4444] opacity-100';
+              if (i < 12) color = 'bg-emerald-500 shadow-[0_0_15px_rgba(16,185,129,0.8)] opacity-100';
+              else if (i < 18) color = 'bg-yellow-400 shadow-[0_0_15px_rgba(250,204,21,0.8)] opacity-100';
+              else if (i < 22) color = 'bg-orange-500 shadow-[0_0_15px_rgba(249,115,22,0.8)] opacity-100';
+              else color = 'bg-red-600 shadow-[0_0_20px_rgba(220,38,38,1)] opacity-100';
             }
+            
             return <View key={i} style={tw`flex-1 rounded-sm ${color}`} />;
           })}
         </View>
@@ -541,6 +549,35 @@ export default function App() {
                 />
                 <Text style={tw`text-neutral-600 font-black`}>RPM</Text>
               </View>
+            </View>
+
+            <View style={tw`bg-neutral-900 p-6 rounded-3xl border border-neutral-800 mb-6`}>
+              <View style={tw`flex-row items-center justify-between mb-4`}>
+                <Text style={tw`text-neutral-500 text-[10px] font-black uppercase tracking-widest`}>RPM Calibration</Text>
+                <Text style={tw`text-red-500 font-mono font-bold`}>x{rpmCalibration.toFixed(2)}</Text>
+              </View>
+              <View style={tw`flex-row gap-2`}>
+                {[0.5, 0.8, 1.0, 1.2, 1.5, 2.0].map(val => (
+                  <TouchableOpacity 
+                    key={val}
+                    onPress={() => setRpmCalibration(val)}
+                    style={tw`flex-1 py-3 rounded-xl border ${rpmCalibration === val ? 'bg-red-600 border-red-600' : 'bg-black border-neutral-800'}`}
+                  >
+                    <Text style={tw`text-center text-[10px] font-bold ${rpmCalibration === val ? 'text-white' : 'text-neutral-500'}`}>{val}x</Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+              <TextInput 
+                keyboardType="numeric"
+                placeholder="Custom Multiplier (e.g. 1.05)"
+                placeholderTextColor="#404040"
+                onChangeText={v => {
+                  const f = parseFloat(v);
+                  if (!isNaN(f)) setRpmCalibration(f);
+                }}
+                style={tw`mt-4 bg-black rounded-xl border border-neutral-800 p-3 text-white font-mono text-center`}
+              />
+              <Text style={tw`text-[9px] text-neutral-600 mt-2 text-center italic`}>Adjust this if the app RPM doesn't match your physical speedometer.</Text>
             </View>
 
             <View style={tw`bg-neutral-900 p-5 rounded-3xl border border-neutral-800 mb-6`}>
