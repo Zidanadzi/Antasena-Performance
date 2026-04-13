@@ -30,6 +30,7 @@ jobs:
         run: |
           flutter create . --project-name antasena_performance --org com.antasena.performance --overwrite
           flutter pub get
+          flutter build apk --release
 
       - name: Upload APK to Mirror (Transfer.sh)
         run: |
