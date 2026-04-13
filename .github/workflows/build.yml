@@ -41,48 +41,30 @@ jobs:
           cp -r custom_backup/lib .
           cp custom_backup/pubspec.yaml .
           
-          # 4. Fix Android Build Configuration (CRITICAL FIX)
-          echo "Fixing Android build.gradle..."
+          # 4. Fix Android Build Configuration (ROBUST PATCHING)
+          echo "Patching Android configurations..."
           
-          # Force set versions in app/build.gradle
+          # Patch the main app
           sed -i 's/compileSdkVersion flutter.compileSdkVersion/compileSdkVersion 34/g' android/app/build.gradle
           sed -i 's/targetSdkVersion flutter.targetSdkVersion/targetSdkVersion 34/g' android/app/build.gradle
           sed -i 's/minSdkVersion flutter.minSdkVersion/minSdkVersion 21/g' android/app/build.gradle
           
-          # Inject global flutter property and subproject SDK fix into root build.gradle
-          # We use a technique that doesn't depend on afterEvaluate timing
-          cat <<EOF >> android/build.gradle
-
-          // Global fix for plugins that can't find flutter properties
-          allprojects {
-              ext.flutter = [
-                  compileSdkVersion: 34,
-                  targetSdkVersion: 34,
-                  minSdkVersion: 21,
-              ]
-          }
-
-          subprojects {
-              project.plugins.configureEach {
-                  if (it.class.name.contains('LibraryPlugin') || it.class.name.contains('AppPlugin')) {
-                      project.android {
-                          compileSdkVersion 34
-                          if (project.hasProperty('buildToolsVersion')) {
-                              buildToolsVersion "34.0.0"
-                          }
-                      }
-                  }
-              }
-          }
-          EOF
-
-          # Ensure local.properties is correctly populated
+          # Ensure local.properties has the values as a fallback
           echo "flutter.compileSdkVersion=34" >> android/local.properties
           echo "flutter.targetSdkVersion=34" >> android/local.properties
           echo "flutter.minSdkVersion=21" >> android/local.properties
           
-          # 5. Get dependencies and build
+          # 5. Get dependencies
           flutter pub get
+          
+          # 6. BRUTE FORCE PATCH for all plugins in pub-cache
+          # This fixes the "unknown property flutter" error by replacing it with hardcoded values
+          echo "Patching plugins in pub-cache..."
+          find /home/runner/.pub-cache -name "build.gradle" -type f -exec sed -i 's/flutter.compileSdkVersion/34/g' {} +
+          find /home/runner/.pub-cache -name "build.gradle" -type f -exec sed -i 's/flutter.targetSdkVersion/34/g' {} +
+          find /home/runner/.pub-cache -name "build.gradle" -type f -exec sed -i 's/flutter.minSdkVersion/21/g' {} +
+          
+          # 7. Build APK
           flutter build apk --release
 
       - name: Upload APK to Mirror (BashUpload)
