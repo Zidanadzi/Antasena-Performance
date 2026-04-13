@@ -28,13 +28,20 @@ jobs:
 
       - name: Initialize Flutter Project
         run: |
+          # 1. Backup our custom code
+          mkdir -p custom_backup
+          cp -r lib custom_backup/
+          cp pubspec.yaml custom_backup/
+          
+          # 2. Create the flutter project structure
           flutter create . --project-name antasena_performance --org com.antasena.performance --overwrite
-          # Backup our custom main.dart
-          cp lib/main.dart lib/main.dart.bak
-          # Ensure directories exist
-          mkdir -p lib
-          # Restore our custom main.dart over the default one
-          mv lib/main.dart.bak lib/main.dart
+          
+          # 3. Restore our custom code (This is the critical fix)
+          rm -rf lib
+          cp -r custom_backup/lib .
+          cp custom_backup/pubspec.yaml .
+          
+          # 4. Get dependencies and build
           flutter pub get
           flutter build apk --release
 
