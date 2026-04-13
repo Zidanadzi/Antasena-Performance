@@ -52,17 +52,17 @@ jobs:
           # Fix for flutter_blue_plus unknown property 'flutter' and missing compileSdkVersion
           # We inject a global fix into the root build.gradle
           echo "
-subprojects {
-    afterEvaluate { project ->
-        if (project.hasProperty('android')) {
-            project.android {
-                compileSdkVersion 34
-                buildToolsVersion '34.0.0'
-            }
-        }
-    }
-}
-" >> android/build.gradle
+          subprojects {
+              afterEvaluate { project ->
+                  if (project.hasProperty('android')) {
+                      project.android {
+                          compileSdkVersion 34
+                          buildToolsVersion '34.0.0'
+                      }
+                  }
+              }
+          }
+          " >> android/build.gradle
 
           # Ensure local.properties is correctly populated
           echo "flutter.compileSdkVersion=34" >> android/local.properties
