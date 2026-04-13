@@ -53,28 +53,28 @@ jobs:
           # We use a technique that doesn't depend on afterEvaluate timing
           cat <<EOF >> android/build.gradle
 
-// Global fix for plugins that can't find flutter properties
-allprojects {
-    ext.flutter = [
-        compileSdkVersion: 34,
-        targetSdkVersion: 34,
-        minSdkVersion: 21,
-    ]
-}
+          // Global fix for plugins that can't find flutter properties
+          allprojects {
+              ext.flutter = [
+                  compileSdkVersion: 34,
+                  targetSdkVersion: 34,
+                  minSdkVersion: 21,
+              ]
+          }
 
-subprojects {
-    project.plugins.configureEach {
-        if (it.class.name.contains('LibraryPlugin') || it.class.name.contains('AppPlugin')) {
-            project.android {
-                compileSdkVersion 34
-                if (project.hasProperty('buildToolsVersion')) {
-                    buildToolsVersion "34.0.0"
-                }
-            }
-        }
-    }
-}
-EOF
+          subprojects {
+              project.plugins.configureEach {
+                  if (it.class.name.contains('LibraryPlugin') || it.class.name.contains('AppPlugin')) {
+                      project.android {
+                          compileSdkVersion 34
+                          if (project.hasProperty('buildToolsVersion')) {
+                              buildToolsVersion "34.0.0"
+                          }
+                      }
+                  }
+              }
+          }
+          EOF
 
           # Ensure local.properties is correctly populated
           echo "flutter.compileSdkVersion=34" >> android/local.properties
