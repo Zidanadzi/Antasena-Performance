@@ -36,12 +36,23 @@ jobs:
           # 2. Create the flutter project structure
           flutter create . --project-name antasena_performance --org com.antasena.performance --overwrite
           
-          # 3. Restore our custom code (This is the critical fix)
+          # 3. Restore our custom code
           rm -rf lib
           cp -r custom_backup/lib .
           cp custom_backup/pubspec.yaml .
           
-          # 4. Get dependencies and build
+          # 4. Fix Android Build Configuration (CRITICAL FIX)
+          echo "Fixing Android build.gradle..."
+          sed -i 's/compileSdkVersion flutter.compileSdkVersion/compileSdkVersion 34/g' android/app/build.gradle
+          sed -i 's/targetSdkVersion flutter.targetSdkVersion/targetSdkVersion 34/g' android/app/build.gradle
+          sed -i 's/minSdkVersion flutter.minSdkVersion/minSdkVersion 21/g' android/app/build.gradle
+          
+          # Fix for flutter_blue_plus unknown property 'flutter'
+          echo "flutter.compileSdkVersion=34" >> android/local.properties
+          echo "flutter.targetSdkVersion=34" >> android/local.properties
+          echo "flutter.minSdkVersion=21" >> android/local.properties
+          
+          # 5. Get dependencies and build
           flutter pub get
           flutter build apk --release
 
