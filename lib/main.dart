@@ -8,6 +8,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:flutter_bluetooth_serial/flutter_bluetooth_serial.dart' as classic;
 import 'package:intl/intl.dart';
+import 'package:permission_handler/permission_handler.dart';
 // import 'package:flutter_blue_plus/flutter_blue_plus.dart';
 
 void main() {
@@ -123,7 +124,7 @@ class AppState extends ChangeNotifier {
   Future<void> startClassicScan() async {
     _connectionError = null;
     if (kIsWeb) {
-      // Mock scanning for Web
+      // ... (mock logic remains same)
       _isScanning = true;
       _classicDevices = [];
       notifyListeners();
@@ -139,14 +140,47 @@ class AppState extends ChangeNotifier {
       return;
     }
 
-    // Check if Bluetooth is enabled
+    // Request Permissions for Android
+    if (defaultTargetPlatform == TargetPlatform.android) {
+      Map<Permission, PermissionStatus> statuses = await [
+        Permission.bluetoothScan,
+        Permission.bluetoothConnect,
+        Permission.bluetoothAdvertise,
+        Permission.location,
+      ].request();
+
+      if (statuses[Permission.bluetoothScan] != PermissionStatus.granted ||
+          statuses[Permission.bluetoothConnect] != PermissionStatus.granted) {
+        _connectionError = 'Bluetooth permissions denied. Please enable them in settings.';
+        notifyListeners();
+        return;
+      }
+    }
+
+    // Check if Bluetooth is supported and enabled
     try {
+      bool? isAvailable = await classic.FlutterBluetoothSerial.instance.isAvailable;
+      if (isAvailable == false) {
+        _connectionError = 'Bluetooth is not supported on this device.';
+        notifyListeners();
+        return;
+      }
+
       bool? isEnabled = await classic.FlutterBluetoothSerial.instance.isEnabled;
       if (isEnabled == false) {
         await classic.FlutterBluetoothSerial.instance.requestEnable();
+        // Wait a bit for it to enable
+        await Future.delayed(const Duration(seconds: 2));
+        isEnabled = await classic.FlutterBluetoothSerial.instance.isEnabled;
+        if (isEnabled == false) {
+          _connectionError = 'Please enable Bluetooth to scan for devices.';
+          notifyListeners();
+          return;
+        }
       }
     } catch (e) {
-      debugPrint('Bluetooth not supported or error: $e');
+      debugPrint('Bluetooth init error: $e');
+      _connectionError = 'Bluetooth initialization failed.';
       _isScanning = false;
       notifyListeners();
       return;
@@ -157,11 +191,11 @@ class AppState extends ChangeNotifier {
     notifyListeners();
 
     try {
-      // Get bonded devices first (HC-05 is usually paired manually in Android settings)
+      // Get bonded devices first
       _classicDevices = await classic.FlutterBluetoothSerial.instance.getBondedDevices();
       notifyListeners();
       
-      // Also start discovery for new devices
+      // Also start discovery
       classic.FlutterBluetoothSerial.instance.startDiscovery().listen((r) {
         final existingIndex = _classicDevices.indexWhere((element) => element.address == r.device.address);
         if (existingIndex >= 0) {
@@ -170,6 +204,8 @@ class AppState extends ChangeNotifier {
           _classicDevices.add(r.device);
         }
         notifyListeners();
+      }).onError((e) {
+        debugPrint('Discovery error: $e');
       });
 
       Future.delayed(const Duration(seconds: 10), () {
@@ -177,6 +213,7 @@ class AppState extends ChangeNotifier {
         notifyListeners();
       });
     } catch (e) {
+      debugPrint('Discovery start error: $e');
       _isScanning = false;
       notifyListeners();
     }
@@ -193,9 +230,18 @@ class AppState extends ChangeNotifier {
       return;
     }
 
+    // Ensure discovery is stopped before connecting
+    try {
+      await classic.FlutterBluetoothSerial.instance.cancelDiscovery();
+    } catch (e) {
+      debugPrint('Cancel discovery error: $e');
+    }
+
     try {
       _isScanning = false;
-      _classicConnection = await classic.BluetoothConnection.toAddress(device.address);
+      notifyListeners();
+      
+      _classicConnection = await classic.BluetoothConnection.toAddress(device.address).timeout(const Duration(seconds: 10));
       _isConnected = true;
       _deviceName = device.name ?? device.address;
       
