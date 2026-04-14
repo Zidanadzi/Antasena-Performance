@@ -50,17 +50,22 @@ jobs:
           # 6. Fix Android Build Configuration (Standardized for Plugins)
           echo "Fixing Android build.gradle..."
           
-          # Use the 'ext' properties approach in the root build.gradle.
-          # This is the standard way Flutter plugins expect to receive version overrides.
-          # We use sed to inject these into the buildscript block.
+          # A. Brute-force fix for plugins in pub cache (Fixes flutter_blue_plus and others)
+          # This replaces the problematic 'flutter.compileSdkVersion' variables with hardcoded values
+          # to prevent "property not found" and "sdk not specified" errors in CI.
+          find /home/runner/.pub-cache -name "build.gradle" -exec sed -i 's/flutter.compileSdkVersion/34/g' {} +
+          find /home/runner/.pub-cache -name "build.gradle" -exec sed -i 's/flutter.targetSdkVersion/34/g' {} +
+          find /home/runner/.pub-cache -name "build.gradle" -exec sed -i 's/flutter.minSdkVersion/21/g' {} +
+          
+          # B. Standard 'ext' properties approach in the root build.gradle
           sed -i "/buildscript {/a \    ext.compileSdkVersion = 34\n    ext.targetSdkVersion = 34\n    ext.minSdkVersion = 21" android/build.gradle
 
-          # Also fix the main app's build.gradle to use these global properties
-          sed -i 's/compileSdkVersion flutter.compileSdkVersion/compileSdkVersion rootProject.ext.compileSdkVersion/g' android/app/build.gradle
-          sed -i 's/targetSdkVersion flutter.targetSdkVersion/targetSdkVersion rootProject.ext.targetSdkVersion/g' android/app/build.gradle
-          sed -i 's/minSdkVersion flutter.minSdkVersion/minSdkVersion rootProject.ext.minSdkVersion/g' android/app/build.gradle
+          # C. Fix the main app's build.gradle
+          sed -i 's/compileSdkVersion flutter.compileSdkVersion/compileSdkVersion 34/g' android/app/build.gradle
+          sed -i 's/targetSdkVersion flutter.targetSdkVersion/targetSdkVersion 34/g' android/app/build.gradle
+          sed -i 's/minSdkVersion flutter.minSdkVersion/minSdkVersion 21/g' android/app/build.gradle
           
-          # Ensure local.properties is also populated as a fallback
+          # D. Ensure local.properties is also populated
           echo "flutter.compileSdkVersion=34" >> android/local.properties
           echo "flutter.targetSdkVersion=34" >> android/local.properties
           echo "flutter.minSdkVersion=21" >> android/local.properties
