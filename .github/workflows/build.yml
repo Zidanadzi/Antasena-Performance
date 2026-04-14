@@ -52,20 +52,20 @@ jobs:
           
           # Force all subprojects (plugins) to use the correct SDK versions
           cat <<EOF >> android/build.gradle
-subprojects {
-    afterEvaluate { project ->
-        if (project.extensions.findByName("android") != null) {
-            project.android {
-                compileSdkVersion 34
-                buildToolsVersion "34.0.0"
-                defaultConfig {
-                    targetSdkVersion 34
-                }
-            }
-        }
-    }
-}
-EOF
+          subprojects {
+              afterEvaluate { project ->
+                  if (project.extensions.findByName("android") != null) {
+                      project.android {
+                          compileSdkVersion 34
+                          buildToolsVersion "34.0.0"
+                          defaultConfig {
+                              targetSdkVersion 34
+                          }
+                      }
+                  }
+              }
+          }
+          EOF
 
           # Also fix the main app's build.gradle
           sed -i 's/compileSdkVersion flutter.compileSdkVersion/compileSdkVersion 34/g' android/app/build.gradle
