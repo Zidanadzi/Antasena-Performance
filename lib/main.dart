@@ -7,6 +7,7 @@ import 'dart:async';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:flutter_bluetooth_serial/flutter_bluetooth_serial.dart' as classic;
+import 'package:bluetooth_classic/bluetooth_classic.dart' as btc;
 import 'package:intl/intl.dart';
 import 'package:permission_handler/permission_handler.dart';
 // import 'package:flutter_blue_plus/flutter_blue_plus.dart';
@@ -48,6 +49,7 @@ class AppState extends ChangeNotifier {
   String? _connectionError;
   classic.BluetoothConnection? _classicConnection;
   StreamSubscription? _btSubscription;
+  String _messageBuffer = "";
   List<classic.BluetoothDevice> _classicDevices = [];
   
   // Racebox
@@ -99,6 +101,8 @@ class AppState extends ChangeNotifier {
     _loadSettings();
     _initGps();
     _requestInitialPermissions();
+    // Pre-initialize bluetooth_classic
+    btc.BluetoothClassic().initPermissions();
   }
 
   Future<void> _requestInitialPermissions() async {
@@ -113,6 +117,10 @@ class AppState extends ChangeNotifier {
           Permission.bluetoothConnect,
           Permission.bluetoothAdvertise,
         ].request();
+
+        // Use bluetooth_classic to trigger system pop-up as suggested
+        final btc.BluetoothClassic bluetoothClassic = btc.BluetoothClassic();
+        await bluetoothClassic.initPermissions();
       } catch (e) {
         debugPrint('Initial permission request error: $e');
       }
@@ -122,7 +130,27 @@ class AppState extends ChangeNotifier {
   Future<void> requestManualPermissions() async {
     _connectionError = null;
     notifyListeners();
-    await _requestInitialPermissions();
+    
+    if (!kIsWeb) {
+      try {
+        // Request permissions
+        await [
+          Permission.location,
+          Permission.locationWhenInUse,
+          Permission.bluetooth,
+          Permission.bluetoothScan,
+          Permission.bluetoothConnect,
+          Permission.bluetoothAdvertise,
+        ].request();
+
+        // Trigger system Bluetooth activation pop-up
+        final btc.BluetoothClassic bluetoothClassic = btc.BluetoothClassic();
+        await bluetoothClassic.initPermissions();
+      } catch (e) {
+        debugPrint('Manual permission request error: $e');
+      }
+    }
+    
     notifyListeners();
   }
 
@@ -233,7 +261,13 @@ class AppState extends ChangeNotifier {
 
         bool? isEnabled = await bluetooth.isEnabled;
         if (isEnabled == false) {
+          // Try standard request
           await bluetooth.requestEnable();
+          
+          // Try bluetooth_classic as suggested by user
+          final btc.BluetoothClassic bluetoothClassic = btc.BluetoothClassic();
+          await bluetoothClassic.initPermissions();
+          
           await Future.delayed(const Duration(seconds: 2));
           isEnabled = await bluetooth.isEnabled;
           if (isEnabled == false) {
@@ -342,10 +376,32 @@ class AppState extends ChangeNotifier {
       _deviceName = device.name ?? device.address;
       
       _btSubscription = _classicConnection!.input!.listen((Uint8List data) {
-        String msg = String.fromCharCodes(data);
-        if (msg.contains('RPM:')) {
-          int? val = int.tryParse(msg.split(':')[1].trim());
-          if (val != null) updateRpm(val);
+        _messageBuffer += String.fromCharCodes(data);
+        
+        while (_messageBuffer.contains('\n')) {
+          int index = _messageBuffer.indexOf('\n');
+          String msg = _messageBuffer.substring(0, index).trim();
+          _messageBuffer = _messageBuffer.substring(index + 1);
+          
+          if (msg.contains('RPM:')) {
+            try {
+              String part = msg.split('RPM:')[1].split(',')[0].trim();
+              int? val = int.tryParse(part);
+              if (val != null) updateRpm(val);
+            } catch (e) {
+              debugPrint('Error parsing RPM: $e');
+            }
+          }
+          
+          if (msg.contains('SPEED:')) {
+            try {
+              String part = msg.split('SPEED:')[1].split(',')[0].trim();
+              double? val = double.tryParse(part);
+              if (val != null) _speed = val;
+            } catch (e) {
+              debugPrint('Error parsing Speed: $e');
+            }
+          }
         }
       });
       
@@ -558,7 +614,46 @@ class AppState extends ChangeNotifier {
     await prefs.setDouble('rpmCalibration', _rpmCalibration);
     await prefs.setStringList('tableRpm', _tableRpm.map((e) => e.toString()).toList());
     await prefs.setStringList('tableKill', _tableKill.map((e) => e.toString()).toList());
+    
+    // Write to Bluetooth Module if connected
+    if (_isConnected && _classicConnection != null) {
+      try {
+        // Simple protocol: S[MIN_RPM],[CALIB],[RPM1],[KILL1],...[RPM10],[KILL10]\n
+        String config = "S${_minRpmActive.round()},${_rpmCalibration.toStringAsFixed(1)}";
+        for (int i = 0; i < 10; i++) {
+          config += ",${_tableRpm[i]},${_tableKill[i]}";
+        }
+        config += "\n";
+        
+        _classicConnection!.output.add(Uint8List.fromList(config.codeUnits));
+        await _classicConnection!.output.allSent;
+        debugPrint('Config sent to module: $config');
+      } catch (e) {
+        debugPrint('Error writing to module: $e');
+        _connectionError = 'Failed to write to module: $e';
+      }
+    }
+    
     notifyListeners();
+  }
+
+  void deleteHistoryRecord(RaceRecord record) {
+    _history.remove(record);
+    _saveHistory();
+    notifyListeners();
+  }
+
+  Future<void> _saveHistory() async {
+    final prefs = await SharedPreferences.getInstance();
+    final historyJson = _history.map((r) => {
+      'date': r.date.toIso8601String(),
+      'time': r.time,
+      'topSpeed': r.topSpeed,
+      'zeroToHundred': r.zeroToHundred,
+      'twoHundredMeter': r.twoHundredMeter,
+      'fourHundredMeter': r.fourHundredMeter,
+    }).toList();
+    await prefs.setString('race_history', jsonEncode(historyJson));
   }
 
   @override
@@ -738,7 +833,7 @@ class DashboardPage extends StatelessWidget {
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Text('ANTASENA', style: GoogleFonts.orbitron(fontSize: 16, fontWeight: FontWeight.w900, color: isShiftPoint ? Colors.black : Colors.white, letterSpacing: 1)),
-                          Text('STEALTH HUD', style: GoogleFonts.orbitron(fontSize: 8, fontWeight: FontWeight.bold, color: isShiftPoint ? Colors.black : const Color(0xFFEF4444), letterSpacing: 2)),
+                          Text('PERFORMANCE', style: GoogleFonts.orbitron(fontSize: 8, fontWeight: FontWeight.bold, color: isShiftPoint ? Colors.black : const Color(0xFFEF4444), letterSpacing: 2)),
                         ],
                       ),
                       Row(
@@ -1065,26 +1160,41 @@ class DashboardPage extends StatelessWidget {
   }
 
   Widget _buildStealthRpmBar(int rpm, bool isShiftPoint) {
-    return Container(
-      height: 6,
-      width: double.infinity,
-      decoration: BoxDecoration(
-        color: isShiftPoint ? Colors.black.withOpacity(0.1) : Colors.white.withOpacity(0.05),
-        borderRadius: BorderRadius.circular(2),
-      ),
-      child: FractionallySizedBox(
-        alignment: Alignment.centerLeft,
-        widthFactor: (rpm / 14000).clamp(0.0, 1.0),
-        child: Container(
-          decoration: BoxDecoration(
-            color: isShiftPoint ? Colors.black : const Color(0xFFEF4444),
-            borderRadius: BorderRadius.circular(2),
-            boxShadow: [
-              if (!isShiftPoint) BoxShadow(color: const Color(0xFFEF4444).withOpacity(0.5), blurRadius: 10)
-            ],
+    const int totalBlocks = 25;
+    double progress = (rpm / 14000).clamp(0.0, 1.0);
+    int activeBlocks = (progress * totalBlocks).round();
+
+    return Column(
+      children: [
+        SizedBox(
+          height: 16,
+          width: double.infinity,
+          child: Row(
+            children: List.generate(totalBlocks, (index) {
+              bool isActive = index < activeBlocks;
+              return Expanded(
+                child: Container(
+                  margin: const EdgeInsets.symmetric(horizontal: 1),
+                  decoration: BoxDecoration(
+                    color: isActive 
+                      ? (isShiftPoint ? Colors.black : const Color(0xFFEF4444))
+                      : (isShiftPoint ? Colors.black.withOpacity(0.1) : Colors.white.withOpacity(0.05)),
+                    borderRadius: BorderRadius.circular(1),
+                    boxShadow: [
+                      if (isActive && !isShiftPoint) 
+                        BoxShadow(
+                          color: const Color(0xFFEF4444).withOpacity(0.3), 
+                          blurRadius: 4,
+                          spreadRadius: 0,
+                        )
+                    ],
+                  ),
+                ),
+              );
+            }),
           ),
         ),
-      ),
+      ],
     );
   }
 }
@@ -1578,19 +1688,6 @@ class RaceboxPage extends StatelessWidget {
                     style: GoogleFonts.jetBrainsMono(fontSize: 72, fontWeight: FontWeight.w900, letterSpacing: -4)
                   ),
                   
-                  // Real-time Graph
-                  if (state.currentRaceData.isNotEmpty) ...[
-                    const SizedBox(height: 24),
-                    Container(
-                      height: 100,
-                      width: double.infinity,
-                      padding: const EdgeInsets.symmetric(horizontal: 24),
-                      child: CustomPaint(
-                        painter: RaceGraphPainter(state.currentRaceData),
-                      ),
-                    ),
-                  ],
-
                   const SizedBox(height: 32),
                   Row(
                     mainAxisAlignment: MainAxisAlignment.center,
@@ -1739,6 +1836,7 @@ class RaceboxPage extends StatelessWidget {
   }
 
   Widget _buildHistoryCard(BuildContext context, RaceRecord record) {
+    final state = context.read<AppState>();
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
       padding: const EdgeInsets.all(16),
@@ -1752,7 +1850,16 @@ class RaceboxPage extends StatelessWidget {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Text(DateFormat('MMM dd, HH:mm').format(record.date), style: TextStyle(color: Colors.white.withOpacity(0.3), fontSize: 9, fontWeight: FontWeight.bold)),
+              Row(
+                children: [
+                  Text(DateFormat('MMM dd, HH:mm').format(record.date), style: TextStyle(color: Colors.white.withOpacity(0.3), fontSize: 9, fontWeight: FontWeight.bold)),
+                  const SizedBox(width: 12),
+                  GestureDetector(
+                    onTap: () => state.deleteHistoryRecord(record),
+                    child: Icon(Icons.delete_outline, size: 14, color: Colors.white.withOpacity(0.2)),
+                  ),
+                ],
+              ),
               Text('${record.time.toStringAsFixed(2)}s', style: GoogleFonts.jetBrainsMono(color: const Color(0xFFEF4444), fontWeight: FontWeight.bold, fontSize: 16)),
             ],
           ),
