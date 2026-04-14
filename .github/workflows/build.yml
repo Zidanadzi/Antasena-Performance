@@ -51,7 +51,8 @@ jobs:
           echo "Fixing Android build.gradle..."
           
           # A. Standard 'ext' properties approach in the root build.gradle
-          sed -i "/buildscript {/a \    ext.compileSdkVersion = 34\n    ext.targetSdkVersion = 34\n    ext.minSdkVersion = 21" android/build.gradle
+          # We also set a modern kotlin_version to avoid build errors with newer plugins
+          sed -i "/buildscript {/a \    ext.kotlin_version = '1.9.22'\n    ext.compileSdkVersion = 34\n    ext.targetSdkVersion = 34\n    ext.minSdkVersion = 21" android/build.gradle
 
           # C. Fix the main app's build.gradle
           sed -i 's/compileSdkVersion flutter.compileSdkVersion/compileSdkVersion 34/g' android/app/build.gradle
