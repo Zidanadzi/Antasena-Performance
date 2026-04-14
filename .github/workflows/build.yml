@@ -50,22 +50,9 @@ jobs:
           # 6. Fix Android Build Configuration (Standardized for Plugins)
           echo "Fixing Android build.gradle..."
           
-          # Force all subprojects (plugins) to use the correct SDK versions
-          cat <<EOF >> android/build.gradle
-          subprojects {
-              afterEvaluate { project ->
-                  if (project.extensions.findByName("android") != null) {
-                      project.android {
-                          compileSdkVersion 34
-                          buildToolsVersion "34.0.0"
-                          defaultConfig {
-                              targetSdkVersion 34
-                          }
-                      }
-                  }
-              }
-          }
-          EOF
+          # Use sed to append the subprojects block to the end of the root build.gradle
+          # This avoids indentation issues that can occur with heredocs in YAML
+          printf "\nsubprojects {\n    afterEvaluate { project ->\n        if (project.extensions.findByName(\"android\") != null) {\n            project.android {\n                compileSdkVersion 34\n                buildToolsVersion \"34.0.0\"\n                defaultConfig {\n                    targetSdkVersion 34\n                }\n            }\n        }\n    }\n}\n" >> android/build.gradle
 
           # Also fix the main app's build.gradle
           sed -i 's/compileSdkVersion flutter.compileSdkVersion/compileSdkVersion 34/g' android/app/build.gradle
