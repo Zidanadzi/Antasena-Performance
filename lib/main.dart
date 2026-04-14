@@ -72,6 +72,21 @@ class AppState extends ChangeNotifier {
     notifyListeners();
   }
 
+  void setConnected(bool val) {
+    _isConnected = val;
+    notifyListeners();
+  }
+
+  void updateRaceTime(double val) {
+    _raceTime = val;
+    notifyListeners();
+  }
+
+  void setRaceStatus(String status) {
+    _raceStatus = status;
+    notifyListeners();
+  }
+
   void updateRpm(int val) {
     _rpm = (val * _rpmCalibration).round();
     notifyListeners();
@@ -532,11 +547,11 @@ class TuningPage extends StatelessWidget {
           Container(
             padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
             color: Colors.white.withOpacity(0.02),
-            child: Row(
+            child: const Row(
               children: [
-                const Expanded(child: Text('STAGE', style: TextStyle(fontSize: 8, fontWeight: FontWeight.bold, color: Colors.white30))),
-                const Expanded(flex: 2, child: Text('RPM THRESHOLD', style: TextStyle(fontSize: 8, fontWeight: FontWeight.bold, color: Colors.white30))),
-                const Expanded(child: Text('KILL (MS)', style: TextStyle(fontSize: 8, fontWeight: FontWeight.bold, color: Colors.white30))),
+                Expanded(child: Text('STAGE', style: TextStyle(fontSize: 8, fontWeight: FontWeight.bold, color: Colors.white30))),
+                Expanded(flex: 2, child: Text('RPM THRESHOLD', style: TextStyle(fontSize: 8, fontWeight: FontWeight.bold, color: Colors.white30))),
+                Expanded(child: Text('KILL (MS)', style: TextStyle(fontSize: 8, fontWeight: FontWeight.bold, color: Colors.white30))),
               ],
             ),
           ),
