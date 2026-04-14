@@ -154,6 +154,14 @@ class AppState extends ChangeNotifier {
         // Request Location first as it's often the trigger
         PermissionStatus locStatus = await Permission.location.request();
         debugPrint('Location permission: $locStatus');
+        
+        if (locStatus.isDenied) {
+          locStatus = await Permission.locationWhenInUse.request();
+        }
+
+        // Request Legacy Bluetooth permission
+        PermissionStatus legacyBtStatus = await Permission.bluetooth.request();
+        debugPrint('Legacy Bluetooth permission: $legacyBtStatus');
 
         // Request Bluetooth Scan
         PermissionStatus scanStatus = await Permission.bluetoothScan.status;
@@ -169,6 +177,13 @@ class AppState extends ChangeNotifier {
         }
         debugPrint('Bluetooth Connect permission: $connectStatus');
 
+        // Request Bluetooth Advertise
+        PermissionStatus advStatus = await Permission.bluetoothAdvertise.status;
+        if (advStatus.isDenied) {
+          advStatus = await Permission.bluetoothAdvertise.request();
+        }
+        debugPrint('Bluetooth Advertise permission: $advStatus');
+
         if (scanStatus.isPermanentlyDenied || connectStatus.isPermanentlyDenied) {
           _connectionError = 'Bluetooth permissions are permanently denied. Please enable them in app settings.';
           notifyListeners();
@@ -176,7 +191,7 @@ class AppState extends ChangeNotifier {
         }
 
         if (!scanStatus.isGranted || !connectStatus.isGranted) {
-          _connectionError = 'Bluetooth permissions denied (Scan: $scanStatus, Connect: $connectStatus). Please enable them in settings.';
+          _connectionError = 'Bluetooth permissions denied. On Android 12+, please allow "Nearby Devices" (Perangkat Terdekat) in app settings.';
           notifyListeners();
           return;
         }
