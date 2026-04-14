@@ -122,75 +122,83 @@ class AppState extends ChangeNotifier {
   }
 
   Future<void> startClassicScan() async {
-    _connectionError = null;
-    if (kIsWeb) {
-      // ... (mock logic remains same)
-      _isScanning = true;
-      _classicDevices = [];
-      notifyListeners();
-      
-      await Future.delayed(const Duration(seconds: 2));
-      _classicDevices = [
-        // Mock devices
-        const classic.BluetoothDevice(name: 'HC-05 (MOCK)', address: '00:11:22:33:44:55'),
-        const classic.BluetoothDevice(name: 'HC-06 (MOCK)', address: 'AA:BB:CC:DD:EE:FF'),
-      ];
-      _isScanning = false;
-      notifyListeners();
-      return;
-    }
-
-    // Request Permissions for Android
-    if (defaultTargetPlatform == TargetPlatform.android) {
-      Map<Permission, PermissionStatus> statuses = await [
-        Permission.bluetoothScan,
-        Permission.bluetoothConnect,
-        Permission.bluetoothAdvertise,
-        Permission.location,
-      ].request();
-
-      if (statuses[Permission.bluetoothScan] != PermissionStatus.granted ||
-          statuses[Permission.bluetoothConnect] != PermissionStatus.granted) {
-        _connectionError = 'Bluetooth permissions denied. Please enable them in settings.';
-        notifyListeners();
-        return;
-      }
-    }
-
-    // Check if Bluetooth is supported and enabled
     try {
-      bool? isAvailable = await classic.FlutterBluetoothSerial.instance.isAvailable;
-      if (isAvailable == false) {
-        _connectionError = 'Bluetooth is not supported on this device.';
+      _connectionError = null;
+      if (kIsWeb) {
+        _isScanning = true;
+        _classicDevices = [];
+        notifyListeners();
+        
+        await Future.delayed(const Duration(seconds: 2));
+        _classicDevices = [
+          const classic.BluetoothDevice(name: 'HC-05 (MOCK)', address: '00:11:22:33:44:55'),
+          const classic.BluetoothDevice(name: 'HC-06 (MOCK)', address: 'AA:BB:CC:DD:EE:FF'),
+        ];
+        _isScanning = false;
         notifyListeners();
         return;
       }
 
-      bool? isEnabled = await classic.FlutterBluetoothSerial.instance.isEnabled;
-      if (isEnabled == false) {
-        await classic.FlutterBluetoothSerial.instance.requestEnable();
-        // Wait a bit for it to enable
-        await Future.delayed(const Duration(seconds: 2));
-        isEnabled = await classic.FlutterBluetoothSerial.instance.isEnabled;
-        if (isEnabled == false) {
-          _connectionError = 'Please enable Bluetooth to scan for devices.';
+      if (defaultTargetPlatform != TargetPlatform.android) {
+        _connectionError = 'Bluetooth Classic is only supported on Android.';
+        notifyListeners();
+        return;
+      }
+
+      // Request Permissions for Android
+      try {
+        Map<Permission, PermissionStatus> statuses = await [
+          Permission.bluetoothScan,
+          Permission.bluetoothConnect,
+          Permission.bluetoothAdvertise,
+          Permission.location,
+        ].request();
+
+        if (statuses[Permission.bluetoothScan] != PermissionStatus.granted ||
+            statuses[Permission.bluetoothConnect] != PermissionStatus.granted) {
+          _connectionError = 'Bluetooth permissions denied. Please enable them in settings.';
           notifyListeners();
           return;
         }
+      } catch (e) {
+        debugPrint('Permission request error: $e');
+        _connectionError = 'Failed to request permissions: $e';
+        notifyListeners();
+        return;
       }
-    } catch (e) {
-      debugPrint('Bluetooth init error: $e');
-      _connectionError = 'Bluetooth initialization failed.';
-      _isScanning = false;
+
+      // Check if Bluetooth is supported and enabled
+      try {
+        final bluetooth = classic.FlutterBluetoothSerial.instance;
+        bool? isAvailable = await bluetooth.isAvailable;
+        if (isAvailable == false) {
+          _connectionError = 'Bluetooth is not supported on this device.';
+          notifyListeners();
+          return;
+        }
+
+        bool? isEnabled = await bluetooth.isEnabled;
+        if (isEnabled == false) {
+          await bluetooth.requestEnable();
+          await Future.delayed(const Duration(seconds: 2));
+          isEnabled = await bluetooth.isEnabled;
+          if (isEnabled == false) {
+            _connectionError = 'Please enable Bluetooth to scan for devices.';
+            notifyListeners();
+            return;
+          }
+        }
+      } catch (e) {
+        debugPrint('Bluetooth hardware check error: $e');
+        _connectionError = 'Bluetooth hardware check failed: $e';
+        notifyListeners();
+        return;
+      }
+
+      _isScanning = true;
+      _classicDevices = [];
       notifyListeners();
-      return;
-    }
 
-    _isScanning = true;
-    _classicDevices = [];
-    notifyListeners();
-
-    try {
       // Get bonded devices first
       _classicDevices = await classic.FlutterBluetoothSerial.instance.getBondedDevices();
       notifyListeners();
@@ -213,31 +221,38 @@ class AppState extends ChangeNotifier {
         notifyListeners();
       });
     } catch (e) {
-      debugPrint('Discovery start error: $e');
+      debugPrint('Global Scan Error: $e');
+      _connectionError = 'Scan failed: ${e.toString()}';
       _isScanning = false;
       notifyListeners();
     }
   }
 
   Future<void> connectToClassic(classic.BluetoothDevice device) async {
-    _connectionError = null;
-    if (kIsWeb || device.address.contains('MOCK')) {
-      // Mock connection for Web
-      _isScanning = false;
-      _isConnected = true;
-      _deviceName = device.name ?? device.address;
-      notifyListeners();
-      return;
-    }
-
-    // Ensure discovery is stopped before connecting
     try {
-      await classic.FlutterBluetoothSerial.instance.cancelDiscovery();
-    } catch (e) {
-      debugPrint('Cancel discovery error: $e');
-    }
+      _connectionError = null;
+      if (kIsWeb || device.address.contains('MOCK')) {
+        // Mock connection for Web
+        _isScanning = false;
+        _isConnected = true;
+        _deviceName = device.name ?? device.address;
+        notifyListeners();
+        return;
+      }
 
-    try {
+      if (defaultTargetPlatform != TargetPlatform.android) {
+        _connectionError = 'Bluetooth Classic is only supported on Android.';
+        notifyListeners();
+        return;
+      }
+
+      // Ensure discovery is stopped before connecting
+      try {
+        await classic.FlutterBluetoothSerial.instance.cancelDiscovery();
+      } catch (e) {
+        debugPrint('Cancel discovery error: $e');
+      }
+
       _isScanning = false;
       notifyListeners();
       
@@ -246,8 +261,6 @@ class AppState extends ChangeNotifier {
       _deviceName = device.name ?? device.address;
       
       _classicConnection!.input!.listen((Uint8List data) {
-        // Handle incoming data from HC-05 here
-        // Example: Parsing RPM data sent as string
         String msg = String.fromCharCodes(data);
         if (msg.contains('RPM:')) {
           int? val = int.tryParse(msg.split(':')[1].trim());
@@ -261,6 +274,7 @@ class AppState extends ChangeNotifier {
       
       notifyListeners();
     } catch (e) {
+      debugPrint('Global Connect Error: $e');
       _isConnected = false;
       _connectionError = 'Connection failed: ${e.toString()}';
       if (e.toString().contains('Discovery')) {
@@ -408,21 +422,27 @@ class AppState extends ChangeNotifier {
   }
 
   void _initGps() async {
-    LocationPermission permission = await Geolocator.checkPermission();
-    if (permission == LocationPermission.denied) {
-      permission = await Geolocator.requestPermission();
+    try {
+      LocationPermission permission = await Geolocator.checkPermission();
+      if (permission == LocationPermission.denied) {
+        permission = await Geolocator.requestPermission();
+      }
+      
+      Geolocator.getPositionStream(
+        locationSettings: const LocationSettings(
+          accuracy: LocationAccuracy.bestForNavigation,
+          distanceFilter: 1,
+        ),
+      ).listen((Position position) {
+        _speed = position.speed * 3.6; // m/s to km/h
+        _gpsAccuracy = position.accuracy;
+        notifyListeners();
+      }).onError((e) {
+        debugPrint('GPS Stream Error: $e');
+      });
+    } catch (e) {
+      debugPrint('GPS Init Error: $e');
     }
-    
-    Geolocator.getPositionStream(
-      locationSettings: const LocationSettings(
-        accuracy: LocationAccuracy.bestForNavigation,
-        distanceFilter: 1,
-      ),
-    ).listen((Position position) {
-      _speed = position.speed * 3.6; // m/s to km/h
-      _gpsAccuracy = position.accuracy;
-      notifyListeners();
-    });
   }
 
   Future<void> saveSettings() async {
@@ -714,10 +734,6 @@ class DashboardPage extends StatelessWidget {
   }
 
   void _showBluetoothScanner(BuildContext context, AppState state) {
-    if (!state.isConnected) {
-      state.startClassicScan();
-    }
-
     showModalBottomSheet(
       context: context,
       backgroundColor: const Color(0xFF0A0A0A),
@@ -849,6 +865,13 @@ class DashboardPage extends StatelessWidget {
         ),
       ),
     );
+
+    // Start scan after sheet is shown to avoid build conflicts
+    Future.delayed(const Duration(milliseconds: 300), () {
+      if (!state.isConnected) {
+        state.startClassicScan();
+      }
+    });
   }
 
   Widget _buildDeviceTile(String name, String status, bool connected, VoidCallback onTap) {
