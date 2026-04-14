@@ -192,142 +192,182 @@ class DashboardPage extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final state = context.watch<AppState>();
+    
+    // Shift Light Logic: Flash screen if RPM is high
+    bool isShiftPoint = state.rpm > 12000;
 
-    return SafeArea(
-      child: Padding(
-        padding: const EdgeInsets.all(20.0),
-        child: Column(
+    return Scaffold(
+      backgroundColor: isShiftPoint ? const Color(0xFFEF4444) : Colors.black,
+      body: SafeArea(
+        child: Stack(
           children: [
-            // Header
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text('ANTASENA', style: GoogleFonts.orbitron(fontSize: 20, fontWeight: FontWeight.black, color: Colors.white, letterSpacing: 1)),
-                    Text('PERFORMANCE', style: GoogleFonts.orbitron(fontSize: 10, fontWeight: FontWeight.bold, color: const Color(0xFFEF4444), letterSpacing: 4)),
-                  ],
-                ),
-                _buildStatusIndicator(state),
-              ],
-            ),
-            const SizedBox(height: 40),
-            
-            // Main RPM Gauge
-            Expanded(
-              child: Center(
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Text('ENGINE RPM', style: TextStyle(color: Colors.white.withOpacity(0.3), fontSize: 12, letterSpacing: 2)),
-                    const SizedBox(height: 8),
-                    Text(state.rpm.toString(), style: GoogleFonts.jetBrainsMono(fontSize: 80, fontWeight: FontWeight.bold, letterSpacing: -4)),
-                    const SizedBox(height: 20),
-                    // RPM Bar
-                    _buildRpmBar(state.rpm),
-                  ],
-                ),
+            // Background Pattern (Subtle Grid)
+            Opacity(
+              opacity: 0.05,
+              child: GridView.builder(
+                gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(crossAxisCount: 10),
+                itemBuilder: (context, index) => Container(border: Border.all(color: Colors.white)),
               ),
             ),
             
-            // Speed & Stats
-            Row(
-              children: [
-                _buildMiniStat('SPEED', state.speed.round().toString(), 'KM/H', const Color(0xFFEF4444)),
-                const SizedBox(width: 16),
-                _buildMiniStat('MIN RPM', state.minRpmActive.round().toString(), 'RPM', Colors.white.withOpacity(0.5)),
-              ],
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 24.0, vertical: 16.0),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // Top Info Bar
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text('ANTASENA', style: GoogleFonts.orbitron(fontSize: 16, fontWeight: FontWeight.black, color: isShiftPoint ? Colors.black : Colors.white, letterSpacing: 1)),
+                          Text('STEALTH HUD', style: GoogleFonts.orbitron(fontSize: 8, fontWeight: FontWeight.bold, color: isShiftPoint ? Colors.black : const Color(0xFFEF4444), letterSpacing: 2)),
+                        ],
+                      ),
+                      _buildStatusIndicator(state, isShiftPoint),
+                    ],
+                  ),
+                  
+                  const Spacer(),
+                  
+                  // GIANT RPM DISPLAY
+                  Center(
+                    child: Column(
+                      children: [
+                        Text(state.rpm.toString(), 
+                          style: GoogleFonts.jetBrainsMono(
+                            fontSize: 110, 
+                            fontWeight: FontWeight.w900, 
+                            letterSpacing: -8,
+                            color: isShiftPoint ? Colors.black : Colors.white,
+                          )
+                        ),
+                        Text('RPM', style: TextStyle(color: isShiftPoint ? Colors.black.withOpacity(0.5) : Colors.white.withOpacity(0.2), fontSize: 14, fontWeight: FontWeight.bold, letterSpacing: 4)),
+                      ],
+                    ),
+                  ),
+                  
+                  const Spacer(),
+                  
+                  // SPEED & STATS (BOTTOM)
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.end,
+                    children: [
+                      // Giant Speed
+                      Expanded(
+                        flex: 2,
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text('SPEED', style: TextStyle(color: isShiftPoint ? Colors.black.withOpacity(0.5) : Colors.white.withOpacity(0.2), fontSize: 10, fontWeight: FontWeight.bold, letterSpacing: 2)),
+                            Row(
+                              crossAxisAlignment: CrossAxisAlignment.baseline,
+                              textBaseline: TextBaseline.alphabetic,
+                              children: [
+                                Text(state.speed.round().toString(), 
+                                  style: GoogleFonts.jetBrainsMono(
+                                    fontSize: 64, 
+                                    fontWeight: FontWeight.bold, 
+                                    color: isShiftPoint ? Colors.black : const Color(0xFFEF4444)
+                                  )
+                                ),
+                                const SizedBox(width: 8),
+                                Text('KM/H', style: TextStyle(color: isShiftPoint ? Colors.black.withOpacity(0.5) : Colors.white.withOpacity(0.1), fontSize: 14, fontWeight: FontWeight.bold)),
+                              ],
+                            ),
+                          ],
+                        ),
+                      ),
+                      
+                      // Secondary Stats
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.end,
+                          children: [
+                            _buildCompactStat('MIN RPM', state.minRpmActive.round().toString(), isShiftPoint),
+                            const SizedBox(height: 12),
+                            _buildCompactStat('CALIB', '${state.rpmCalibration}x', isShiftPoint),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                  
+                  const SizedBox(height: 20),
+                  
+                  // Bottom Progress Bar (RPM Range)
+                  _buildStealthRpmBar(state.rpm, isShiftPoint),
+                ],
+              ),
             ),
-            const SizedBox(height: 20),
           ],
         ),
       ),
     );
   }
 
-  Widget _buildStatusIndicator(AppState state) {
+  Widget _buildStatusIndicator(AppState state, bool isShiftPoint) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
       decoration: BoxDecoration(
-        color: Colors.white.withOpacity(0.03),
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: Colors.white.withOpacity(0.05)),
+        color: isShiftPoint ? Colors.black.withOpacity(0.1) : Colors.white.withOpacity(0.05),
+        borderRadius: BorderRadius.circular(4),
+        border: Border.all(color: isShiftPoint ? Colors.black.withOpacity(0.2) : Colors.white.withOpacity(0.1)),
       ),
       child: Row(
         children: [
           Container(
-            width: 8,
-            height: 8,
+            width: 6,
+            height: 6,
             decoration: BoxDecoration(
-              color: state.isConnected ? Colors.green : Colors.red,
+              color: state.isConnected ? const Color(0xFF00FF00) : const Color(0xFFFF0000),
               shape: BoxShape.circle,
-              boxShadow: [BoxShadow(color: (state.isConnected ? Colors.green : Colors.red).withOpacity(0.5), blurRadius: 4)],
             ),
           ),
-          const SizedBox(width: 8),
-          Text(state.isConnected ? 'CONNECTED' : 'OFFLINE', style: const TextStyle(fontSize: 9, fontWeight: FontWeight.bold)),
+          const SizedBox(width: 6),
+          Text(state.isConnected ? 'LIVE' : 'DISCONNECTED', 
+            style: TextStyle(
+              fontSize: 8, 
+              fontWeight: FontWeight.black, 
+              color: isShiftPoint ? Colors.black : Colors.white
+            )
+          ),
         ],
       ),
     );
   }
 
-  Widget _buildRpmBar(int rpm) {
-    return Container(
-      height: 40,
-      width: double.infinity,
-      decoration: BoxDecoration(
-        color: Colors.white.withOpacity(0.03),
-        borderRadius: BorderRadius.circular(10),
-      ),
-      child: ClipRRect(
-        borderRadius: BorderRadius.circular(10),
-        child: Row(
-          children: List.generate(20, (index) {
-            double threshold = (index / 20) * 14000;
-            bool active = rpm > threshold;
-            Color color = Colors.white.withOpacity(0.05);
-            if (active) {
-              if (index < 12) color = Colors.green;
-              else if (index < 16) color = Colors.yellow;
-              else color = Colors.red;
-            }
-            return Expanded(
-              child: Container(
-                margin: const EdgeInsets.symmetric(horizontal: 1),
-                color: color,
-              ),
-            );
-          }),
-        ),
-      ),
+  Widget _buildCompactStat(String label, String value, bool isShiftPoint) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.end,
+      children: [
+        Text(label, style: TextStyle(color: isShiftPoint ? Colors.black.withOpacity(0.5) : Colors.white.withOpacity(0.2), fontSize: 8, fontWeight: FontWeight.bold)),
+        Text(value, style: GoogleFonts.jetBrainsMono(fontSize: 16, fontWeight: FontWeight.bold, color: isShiftPoint ? Colors.black : Colors.white)),
+      ],
     );
   }
 
-  Widget _buildMiniStat(String label, String value, String unit, Color color) {
-    return Expanded(
-      child: Container(
-        padding: const EdgeInsets.all(20),
-        decoration: BoxDecoration(
-          color: const Color(0xFF0F0F0F),
-          borderRadius: BorderRadius.circular(20),
-          border: Border.all(color: Colors.white.withOpacity(0.05)),
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(label, style: TextStyle(color: Colors.white.withOpacity(0.2), fontSize: 9, fontWeight: FontWeight.bold, letterSpacing: 1)),
-            const SizedBox(height: 8),
-            Row(
-              crossAxisAlignment: CrossAxisAlignment.baseline,
-              textBaseline: TextBaseline.alphabetic,
-              children: [
-                Text(value, style: GoogleFonts.jetBrainsMono(fontSize: 24, fontWeight: FontWeight.bold, color: color)),
-                const SizedBox(width: 4),
-                Text(unit, style: TextStyle(color: Colors.white.withOpacity(0.1), fontSize: 10)),
-              ],
-            ),
-          ],
+  Widget _buildStealthRpmBar(int rpm, bool isShiftPoint) {
+    return Container(
+      height: 6,
+      width: double.infinity,
+      decoration: BoxDecoration(
+        color: isShiftPoint ? Colors.black.withOpacity(0.1) : Colors.white.withOpacity(0.05),
+        borderRadius: BorderRadius.circular(2),
+      ),
+      child: FractionallySizedBox(
+        alignment: Alignment.centerLeft,
+        widthFactor: (rpm / 14000).clamp(0.0, 1.0),
+        child: Container(
+          decoration: BoxDecoration(
+            color: isShiftPoint ? Colors.black : const Color(0xFFEF4444),
+            borderRadius: BorderRadius.circular(2),
+            boxShadow: [
+              if (!isShiftPoint) BoxShadow(color: const Color(0xFFEF4444).withOpacity(0.5), blurRadius: 10)
+            ],
+          ),
         ),
       ),
     );
@@ -343,46 +383,77 @@ class TuningPage extends StatelessWidget {
     final state = context.watch<AppState>();
 
     return Scaffold(
+      backgroundColor: Colors.black,
       appBar: AppBar(
         title: Text('TUNING SYSTEM', style: GoogleFonts.orbitron(fontSize: 14, fontWeight: FontWeight.bold, letterSpacing: 2)),
-        backgroundColor: Colors.transparent,
+        backgroundColor: Colors.black,
         elevation: 0,
         centerTitle: true,
+        bottom: PreferredSize(
+          preferredSize: const Size.fromHeight(1),
+          child: Container(color: Colors.white.withOpacity(0.05), height: 1),
+        ),
       ),
       body: SingleChildScrollView(
-        padding: const EdgeInsets.all(20),
+        padding: const EdgeInsets.all(24),
         child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            _buildTuningCard('MINIMUM RPM', state.minRpmActive.round().toString(), 'RPM', Icons.keyboard_double_arrow_up),
+            // Section Header
+            _buildSectionHeader('QUICKSHIFTER CONFIG'),
+            const SizedBox(height: 20),
+            
+            _buildStealthTuningCard('MINIMUM RPM', state.minRpmActive.round().toString(), 'RPM'),
             const SizedBox(height: 16),
-            _buildCalibrationSelector(state),
-            const SizedBox(height: 16),
-            _buildKillTable(state),
-            const SizedBox(height: 30),
-            SizedBox(
-              width: double.infinity,
-              height: 60,
-              child: ElevatedButton(
-                onPressed: () => state.saveSettings(),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: const Color(0xFFEF4444),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
+            _buildStealthCalibrationSelector(state),
+            
+            const SizedBox(height: 32),
+            _buildSectionHeader('KILL TIME MATRIX'),
+            const SizedBox(height: 20),
+            _buildStealthKillMatrix(state),
+            
+            const SizedBox(height: 40),
+            
+            // Write Button
+            GestureDetector(
+              onTap: () => state.saveSettings(),
+              child: Container(
+                width: double.infinity,
+                padding: const EdgeInsets.symmetric(vertical: 20),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFEF4444),
+                  borderRadius: BorderRadius.circular(4),
+                  boxShadow: [BoxShadow(color: const Color(0xFFEF4444).withOpacity(0.3), blurRadius: 20)],
                 ),
-                child: const Text('WRITE TO MODULE', style: TextStyle(fontWeight: FontWeight.bold, letterSpacing: 2)),
+                child: Center(
+                  child: Text('WRITE TO MODULE', 
+                    style: GoogleFonts.orbitron(fontWeight: FontWeight.black, letterSpacing: 2, fontSize: 12)
+                  ),
+                ),
               ),
             ),
+            const SizedBox(height: 40),
           ],
         ),
       ),
     );
   }
 
-  Widget _buildTuningCard(String label, String value, String unit, IconData icon) {
+  Widget _buildSectionHeader(String title) {
+    return Row(
+      children: [
+        Container(width: 4, height: 14, color: const Color(0xFFEF4444)),
+        const SizedBox(width: 10),
+        Text(title, style: GoogleFonts.orbitron(fontSize: 10, fontWeight: FontWeight.bold, letterSpacing: 1.5, color: Colors.white.withOpacity(0.5))),
+      ],
+    );
+  }
+
+  Widget _buildStealthTuningCard(String label, String value, String unit) {
     return Container(
-      padding: const EdgeInsets.all(24),
+      padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
-        color: const Color(0xFF0F0F0F),
-        borderRadius: BorderRadius.circular(24),
+        color: const Color(0xFF0A0A0A),
         border: Border.all(color: Colors.white.withOpacity(0.05)),
       ),
       child: Row(
@@ -391,44 +462,37 @@ class TuningPage extends StatelessWidget {
           Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Row(
-                children: [
-                  Icon(icon, size: 12, color: const Color(0xFFEF4444)),
-                  const SizedBox(width: 8),
-                  Text(label, style: TextStyle(color: Colors.white.withOpacity(0.3), fontSize: 10, fontWeight: FontWeight.bold)),
-                ],
-              ),
-              const SizedBox(height: 12),
+              Text(label, style: TextStyle(color: Colors.white.withOpacity(0.3), fontSize: 8, fontWeight: FontWeight.bold)),
+              const SizedBox(height: 8),
               Row(
                 crossAxisAlignment: CrossAxisAlignment.baseline,
                 textBaseline: TextBaseline.alphabetic,
                 children: [
-                  Text(value, style: GoogleFonts.jetBrainsMono(fontSize: 32, fontWeight: FontWeight.bold)),
-                  const SizedBox(width: 8),
-                  Text(unit, style: TextStyle(color: Colors.white.withOpacity(0.1), fontSize: 12)),
+                  Text(value, style: GoogleFonts.jetBrainsMono(fontSize: 28, fontWeight: FontWeight.bold)),
+                  const SizedBox(width: 6),
+                  Text(unit, style: TextStyle(color: Colors.white.withOpacity(0.1), fontSize: 10)),
                 ],
               ),
             ],
           ),
-          const Icon(Icons.arrow_forward_ios, size: 16, color: Colors.white10),
+          const Icon(Icons.tune, size: 20, color: Colors.white10),
         ],
       ),
     );
   }
 
-  Widget _buildCalibrationSelector(AppState state) {
+  Widget _buildStealthCalibrationSelector(AppState state) {
     return Container(
-      padding: const EdgeInsets.all(24),
+      padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
-        color: const Color(0xFF0F0F0F),
-        borderRadius: BorderRadius.circular(24),
+        color: const Color(0xFF0A0A0A),
         border: Border.all(color: Colors.white.withOpacity(0.05)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text('RPM CALIBRATION', style: TextStyle(color: Colors.white.withOpacity(0.3), fontSize: 10, fontWeight: FontWeight.bold)),
-          const SizedBox(height: 20),
+          Text('RPM CALIBRATION', style: TextStyle(color: Colors.white.withOpacity(0.3), fontSize: 8, fontWeight: FontWeight.bold)),
+          const SizedBox(height: 16),
           Row(
             children: [0.8, 1.0, 1.2, 1.5].map((v) {
               bool selected = state.rpmCalibration == v;
@@ -436,14 +500,13 @@ class TuningPage extends StatelessWidget {
                 child: GestureDetector(
                   onTap: () => state.setRpmCalibration(v),
                   child: Container(
-                    margin: const EdgeInsets.symmetric(horizontal: 4),
-                    padding: const EdgeInsets.symmetric(vertical: 12),
+                    margin: const EdgeInsets.symmetric(horizontal: 2),
+                    padding: const EdgeInsets.symmetric(vertical: 14),
                     decoration: BoxDecoration(
                       color: selected ? const Color(0xFFEF4444) : Colors.black,
-                      borderRadius: BorderRadius.circular(12),
-                      border: Border.all(color: selected ? Colors.transparent : Colors.white10),
+                      border: Border.all(color: selected ? Colors.transparent : Colors.white.withOpacity(0.05)),
                     ),
-                    child: Text('${v}x', textAlign: TextAlign.center, style: TextStyle(color: selected ? Colors.white : Colors.white30, fontWeight: FontWeight.bold, fontSize: 12)),
+                    child: Text('${v}x', textAlign: TextAlign.center, style: TextStyle(color: selected ? Colors.white : Colors.white20, fontWeight: FontWeight.bold, fontSize: 11)),
                   ),
                 ),
               );
@@ -454,50 +517,41 @@ class TuningPage extends StatelessWidget {
     );
   }
 
-  Widget _buildKillTable(AppState state) {
+  Widget _buildStealthKillMatrix(AppState state) {
     return Container(
-      padding: const EdgeInsets.all(24),
       decoration: BoxDecoration(
-        color: const Color(0xFF0F0F0F),
-        borderRadius: BorderRadius.circular(24),
         border: Border.all(color: Colors.white.withOpacity(0.05)),
       ),
       child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text('KILL TIME TABLE (MS)', style: TextStyle(color: Colors.white.withOpacity(0.3), fontSize: 10, fontWeight: FontWeight.bold)),
-          const SizedBox(height: 20),
+          // Table Header
+          Container(
+            padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
+            color: Colors.white.withOpacity(0.02),
+            child: Row(
+              children: [
+                const Expanded(child: Text('STAGE', style: TextStyle(fontSize: 8, fontWeight: FontWeight.bold, color: Colors.white30))),
+                const Expanded(flex: 2, child: Text('RPM THRESHOLD', style: TextStyle(fontSize: 8, fontWeight: FontWeight.bold, color: Colors.white30))),
+                const Expanded(child: Text('KILL (MS)', style: TextStyle(fontSize: 8, fontWeight: FontWeight.bold, color: Colors.white30))),
+              ],
+            ),
+          ),
+          // Table Rows
           ...List.generate(4, (i) {
-            return Padding(
-              padding: const EdgeInsets.only(bottom: 12),
+            return Container(
+              padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 16),
+              decoration: BoxDecoration(
+                border: Border(top: BorderSide(color: Colors.white.withOpacity(0.05))),
+              ),
               child: Row(
                 children: [
-                  Text('S${i+1}', style: const TextStyle(color: Color(0xFFEF4444), fontWeight: FontWeight.bold)),
-                  const SizedBox(width: 20),
-                  Expanded(child: _buildTableInput(state.tableRpm[i].toString(), 'RPM')),
-                  const SizedBox(width: 12),
-                  Expanded(child: _buildTableInput(state.tableKill[i].toString(), 'MS')),
+                  Expanded(child: Text('S${i+1}', style: const TextStyle(color: Color(0xFFEF4444), fontWeight: FontWeight.black, fontSize: 12))),
+                  Expanded(flex: 2, child: Text(state.tableRpm[i].toString(), style: GoogleFonts.jetBrainsMono(fontWeight: FontWeight.bold, fontSize: 14))),
+                  Expanded(child: Text(state.tableKill[i].toString(), style: GoogleFonts.jetBrainsMono(fontWeight: FontWeight.bold, fontSize: 14, color: const Color(0xFF00FF00)))),
                 ],
               ),
             );
           }),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildTableInput(String val, String unit) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-      decoration: BoxDecoration(
-        color: Colors.black,
-        borderRadius: BorderRadius.circular(12),
-      ),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
-          Text(val, style: GoogleFonts.jetBrainsMono(fontWeight: FontWeight.bold)),
-          Text(unit, style: const TextStyle(color: Colors.white10, fontSize: 9)),
         ],
       ),
     );
@@ -513,76 +567,102 @@ class RaceboxPage extends StatelessWidget {
     final state = context.watch<AppState>();
 
     return Scaffold(
+      backgroundColor: Colors.black,
       appBar: AppBar(
         title: Text('RACEBOX GPS', style: GoogleFonts.orbitron(fontSize: 14, fontWeight: FontWeight.bold, letterSpacing: 2)),
-        backgroundColor: Colors.transparent,
+        backgroundColor: Colors.black,
         elevation: 0,
         centerTitle: true,
+        bottom: PreferredSize(
+          preferredSize: const Size.fromHeight(1),
+          child: Container(color: Colors.white.withOpacity(0.05), height: 1),
+        ),
       ),
       body: Padding(
-        padding: const EdgeInsets.all(20),
+        padding: const EdgeInsets.all(24),
         child: Column(
           children: [
+            // Main Timer Display
             Container(
               width: double.infinity,
-              padding: const EdgeInsets.symmetric(vertical: 40),
+              padding: const EdgeInsets.symmetric(vertical: 48),
               decoration: BoxDecoration(
-                color: const Color(0xFF0F0F0F),
-                borderRadius: BorderRadius.circular(30),
+                color: const Color(0xFF0A0A0A),
                 border: Border.all(color: Colors.white.withOpacity(0.05)),
               ),
               child: Column(
                 children: [
-                  Text('CURRENT TIME', style: TextStyle(color: Colors.white.withOpacity(0.2), fontSize: 10, letterSpacing: 2)),
+                  Text('SESSION TIMER', style: TextStyle(color: Colors.white.withOpacity(0.2), fontSize: 10, fontWeight: FontWeight.bold, letterSpacing: 2)),
                   const SizedBox(height: 16),
-                  Text(state.raceTime.toStringAsFixed(2), style: GoogleFonts.jetBrainsMono(fontSize: 70, fontWeight: FontWeight.bold)),
-                  const SizedBox(height: 30),
+                  Text(state.raceTime.toStringAsFixed(2), 
+                    style: GoogleFonts.jetBrainsMono(fontSize: 80, fontWeight: FontWeight.w900, letterSpacing: -4)
+                  ),
+                  const SizedBox(height: 40),
                   Row(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      _buildRaceButton('START', const Color(0xFF10B981), () {}),
-                      const SizedBox(width: 16),
-                      _buildRaceButton('RESET', Colors.white10, () {}),
+                      _buildStealthRaceButton('START', const Color(0xFF00FF00), () {}),
+                      const SizedBox(width: 12),
+                      _buildStealthRaceButton('RESET', Colors.white.withOpacity(0.05), () {}),
                     ],
                   ),
                 ],
               ),
             ),
-            const SizedBox(height: 24),
-            _buildMetricRow('0-100 KM/H', '-- s'),
-            _buildMetricRow('201 METER', '-- s'),
-            _buildMetricRow('402 METER', '-- s'),
+            
+            const SizedBox(height: 32),
+            
+            // Metrics Header
+            Row(
+              children: [
+                Container(width: 4, height: 14, color: const Color(0xFFEF4444)),
+                const SizedBox(width: 10),
+                Text('PERFORMANCE METRICS', style: GoogleFonts.orbitron(fontSize: 10, fontWeight: FontWeight.bold, letterSpacing: 1.5, color: Colors.white.withOpacity(0.5))),
+              ],
+            ),
+            const SizedBox(height: 20),
+            
+            _buildStealthMetricRow('0-100 KM/H', '-- s'),
+            _buildStealthMetricRow('201 METER', '-- s'),
+            _buildStealthMetricRow('402 METER', '-- s'),
           ],
         ),
       ),
     );
   }
 
-  Widget _buildRaceButton(String label, Color color, VoidCallback onTap) {
+  Widget _buildStealthRaceButton(String label, Color color, VoidCallback onTap) {
+    bool isAction = color != Colors.white.withOpacity(0.05);
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 30, vertical: 15),
+      padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 16),
       decoration: BoxDecoration(
         color: color,
-        borderRadius: BorderRadius.circular(15),
+        borderRadius: BorderRadius.circular(2),
       ),
-      child: Text(label, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
+      child: Text(label, 
+        style: TextStyle(
+          fontWeight: FontWeight.black, 
+          fontSize: 10, 
+          letterSpacing: 1,
+          color: isAction ? Colors.black : Colors.white
+        )
+      ),
     );
   }
 
-  Widget _buildMetricRow(String label, String value) {
+  Widget _buildStealthMetricRow(String label, String value) {
     return Container(
-      margin: const EdgeInsets.only(bottom: 12),
-      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 20),
+      margin: const EdgeInsets.only(bottom: 1),
+      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 20),
       decoration: BoxDecoration(
-        color: const Color(0xFF0F0F0F),
-        borderRadius: BorderRadius.circular(20),
+        color: const Color(0xFF0A0A0A),
         border: Border.all(color: Colors.white.withOpacity(0.05)),
       ),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          Text(label, style: TextStyle(color: Colors.white.withOpacity(0.3), fontWeight: FontWeight.bold, fontSize: 11)),
-          Text(value, style: GoogleFonts.jetBrainsMono(fontWeight: FontWeight.bold, fontSize: 18)),
+          Text(label, style: TextStyle(color: Colors.white.withOpacity(0.3), fontWeight: FontWeight.bold, fontSize: 10)),
+          Text(value, style: GoogleFonts.jetBrainsMono(fontWeight: FontWeight.bold, fontSize: 20, color: const Color(0xFFEF4444))),
         ],
       ),
     );
