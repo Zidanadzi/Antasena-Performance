@@ -104,11 +104,14 @@ class AppState extends ChangeNotifier {
   Future<void> _requestInitialPermissions() async {
     if (!kIsWeb) {
       try {
+        // Request in bulk first
         await [
           Permission.location,
+          Permission.locationWhenInUse,
           Permission.bluetooth,
           Permission.bluetoothScan,
           Permission.bluetoothConnect,
+          Permission.bluetoothAdvertise,
         ].request();
       } catch (e) {
         debugPrint('Initial permission request error: $e');
@@ -182,8 +185,10 @@ class AppState extends ChangeNotifier {
         
         Map<Permission, PermissionStatus> statuses = await [
           Permission.location,
+          Permission.locationWhenInUse,
           Permission.bluetoothScan,
           Permission.bluetoothConnect,
+          Permission.bluetoothAdvertise,
           Permission.bluetooth,
         ].request();
         
@@ -192,8 +197,9 @@ class AppState extends ChangeNotifier {
         final scanStatus = statuses[Permission.bluetoothScan] ?? PermissionStatus.denied;
         final connectStatus = statuses[Permission.bluetoothConnect] ?? PermissionStatus.denied;
         final btStatus = statuses[Permission.bluetooth] ?? PermissionStatus.denied;
+        final locStatus = statuses[Permission.location] ?? PermissionStatus.denied;
         
-        debugPrint('Scan: $scanStatus, Connect: $connectStatus, BT: $btStatus');
+        debugPrint('Scan: $scanStatus, Connect: $connectStatus, BT: $btStatus, Loc: $locStatus');
         
         if (scanStatus.isPermanentlyDenied || connectStatus.isPermanentlyDenied) {
           _connectionError = 'Bluetooth permissions are permanently denied. Please enable "Nearby Devices" in app settings.';
@@ -202,7 +208,6 @@ class AppState extends ChangeNotifier {
         }
 
         if (!scanStatus.isGranted && !kIsWeb) {
-          final locStatus = statuses[Permission.location] ?? PermissionStatus.denied;
           if (!locStatus.isGranted) {
             _connectionError = 'Location & Nearby Devices permissions are required for Bluetooth scanning.';
             notifyListeners();

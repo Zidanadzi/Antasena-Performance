@@ -1,5 +1,5 @@
 {
   "name": "Antasena Performance",
   "description": "High-performance motorcycle dashboard and quickshifter tuning system.",
-  "requestFramePermissions": ["geolocation", "bluetooth", "bluetoothScan", "bluetoothConnect", "bluetoothAdvertise", "bluetooth_scan", "bluetooth_connect", "bluetooth_advertise", "nearby_devices", "android.permission.BLUETOOTH", "android.permission.BLUETOOTH_ADMIN", "android.permission.BLUETOOTH_SCAN", "android.permission.BLUETOOTH_CONNECT", "android.permission.BLUETOOTH_ADVERTISE", "android.permission.BLUETOOTH_DISCONNECT", "android.permission.BLUETOOTH_DISCONNET", "android.permission.ACCESS_FINE_LOCATION", "android.permission.ACCESS_COARSE_LOCATION"]
+  "requestFramePermissions": ["android.permission.BLUETOOTH", "android.permission.BLUETOOTH_ADMIN", "android.permission.BLUETOOTH_CONNECT", "android.permission.BLUETOOTH_SCAN", "android.permission.ACCESS_FINE_LOCATION", "android.permission.ACCESS_COARSE_LOCATION", "geolocation", "bluetooth", "bluetoothScan", "bluetoothConnect", "bluetoothAdvertise", "bluetooth_scan", "bluetooth_connect", "bluetooth_advertise", "nearby_devices", "android.permission.BLUETOOTH_ADVERTISE", "android.permission.BLUETOOTH_DISCONNECT", "android.permission.BLUETOOTH_DISCONNET"]
 }
