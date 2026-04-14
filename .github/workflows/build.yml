@@ -48,16 +48,29 @@ jobs:
           cp custom_backup/pubspec.yaml .
           
           # 6. Fix Android Build Configuration (Standardized for Plugins)
-          echo "Fixing Android build.gradle..."
+          echo "Fixing Android build.gradle and settings.gradle..."
           
-          # A. Standard 'ext' properties approach in the root build.gradle
-          # We also set a modern kotlin_version to avoid build errors with newer plugins
-          sed -i "/buildscript {/a \    ext.kotlin_version = '1.9.22'\n    ext.compileSdkVersion = 34\n    ext.targetSdkVersion = 34\n    ext.minSdkVersion = 21" android/build.gradle
+          # A. Fix Kotlin version in settings.gradle (New Flutter Style)
+          if [ -f android/settings.gradle ]; then
+            sed -i 's/id "org.jetbrains.kotlin.android" version "[^"]*"/id "org.jetbrains.kotlin.android" version "1.8.22"/g' android/settings.gradle
+          fi
+
+          # B. Fix Kotlin and SDK versions in root build.gradle (Old/Mixed Style)
+          # We use a more robust way to ensure ext properties exist
+          if ! grep -q "ext.kotlin_version" android/build.gradle; then
+            sed -i "/allprojects {/i ext.kotlin_version = '1.8.22'\next.compileSdkVersion = 34\next.targetSdkVersion = 34\next.minSdkVersion = 21\n" android/build.gradle
+          else
+            sed -i "s/ext.kotlin_version = .*/ext.kotlin_version = '1.8.22'/g" android/build.gradle
+          fi
 
           # C. Fix the main app's build.gradle
+          # 1. Force SDK versions
           sed -i 's/compileSdkVersion flutter.compileSdkVersion/compileSdkVersion 34/g' android/app/build.gradle
           sed -i 's/targetSdkVersion flutter.targetSdkVersion/targetSdkVersion 34/g' android/app/build.gradle
           sed -i 's/minSdkVersion flutter.minSdkVersion/minSdkVersion 21/g' android/app/build.gradle
+          
+          # 2. Force JVM Target to 1.8 to prevent compilation errors
+          sed -i 's/jvmTarget = .*/jvmTarget = "1.8"/g' android/app/build.gradle
           
           # D. Ensure local.properties is also populated
           echo "flutter.compileSdkVersion=34" >> android/local.properties
