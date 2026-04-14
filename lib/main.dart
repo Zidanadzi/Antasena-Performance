@@ -345,7 +345,7 @@ class DashboardPage extends StatelessWidget {
                                 color: state.isDemoMode ? const Color(0xFFEF4444) : Colors.white.withOpacity(0.05),
                                 borderRadius: BorderRadius.circular(2),
                               ),
-                              child: Text('DEMO', style: TextStyle(fontSize: 8, fontWeight: FontWeight.black, color: state.isDemoMode ? Colors.white : Colors.white20)),
+                              child: Text('DEMO', style: TextStyle(fontSize: 8, fontWeight: FontWeight.w900, color: state.isDemoMode ? Colors.white : Colors.white.withOpacity(0.2))),
                             ),
                           ),
                           const SizedBox(width: 8),
