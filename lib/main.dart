@@ -64,8 +64,8 @@ class AppState extends ChangeNotifier {
   double _gpsAccuracy = 0;
   
   // Race History & Real-time Data
-  List<RaceRecord> _history = [];
-  List<DataPoint> _currentRaceData = [];
+  final List<RaceRecord> _history = [];
+  final List<DataPoint> _currentRaceData = [];
   
   // Getters
   int get rpm => _rpm;
@@ -247,7 +247,7 @@ class AppState extends ChangeNotifier {
     _zeroToHundred = null;
     _twoHundredMeter = null;
     _fourHundredMeter = null;
-    _currentRaceData = [];
+    _currentRaceData.clear();
     
     _raceTimer = Timer.periodic(const Duration(milliseconds: 100), (timer) {
       _raceTime += 0.1;
@@ -308,7 +308,7 @@ class AppState extends ChangeNotifier {
     _zeroToHundred = null;
     _twoHundredMeter = null;
     _fourHundredMeter = null;
-    _currentRaceData = [];
+    _currentRaceData.clear();
     notifyListeners();
   }
 
