@@ -1,5 +1,5 @@
 {
   "name": "Antasena Performance",
   "description": "High-performance motorcycle dashboard and quickshifter tuning system.",
-  "requestFramePermissions": ["geolocation", "bluetooth", "bluetooth-scan", "bluetooth-connect", "bluetooth-advertise"]
+  "requestFramePermissions": ["geolocation", "bluetooth", "bluetooth_scan", "bluetooth_connect", "bluetooth_advertise", "bluetooth_admin"]
 }

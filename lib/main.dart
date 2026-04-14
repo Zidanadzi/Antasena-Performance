@@ -98,6 +98,14 @@ class AppState extends ChangeNotifier {
   AppState() {
     _loadSettings();
     _initGps();
+    _requestInitialPermissions();
+  }
+
+  Future<void> _requestInitialPermissions() async {
+    if (!kIsWeb) {
+      await Permission.location.request();
+      await Permission.bluetooth.request();
+    }
   }
 
   Future<void> _loadSettings() async {
@@ -121,6 +129,11 @@ class AppState extends ChangeNotifier {
   void setScanning(bool val) {
     _isScanning = val;
     if (val) _isConnected = false;
+    notifyListeners();
+  }
+
+  void setConnectionError(String? error) {
+    _connectionError = error;
     notifyListeners();
   }
 
@@ -152,35 +165,31 @@ class AppState extends ChangeNotifier {
       try {
         debugPrint('Requesting Bluetooth permissions...');
         
-        // Request Location first as it's often the trigger
+        // Request Location first
         debugPrint('Requesting Location permission...');
-        PermissionStatus locStatus = await Permission.location.request();
-        if (locStatus.isDenied) {
-          locStatus = await Permission.locationWhenInUse.request();
-        }
-        debugPrint('Location permission: $locStatus');
-
+        await Permission.location.request();
+        await Future.delayed(const Duration(milliseconds: 500));
+        
         // Request Bluetooth Scan
         debugPrint('Requesting Bluetooth Scan permission...');
-        PermissionStatus scanStatus = await Permission.bluetoothScan.request();
-        debugPrint('Bluetooth Scan permission: $scanStatus');
+        await Permission.bluetoothScan.request();
+        await Future.delayed(const Duration(milliseconds: 500));
 
         // Request Bluetooth Connect
         debugPrint('Requesting Bluetooth Connect permission...');
-        PermissionStatus connectStatus = await Permission.bluetoothConnect.request();
-        debugPrint('Bluetooth Connect permission: $connectStatus');
+        await Permission.bluetoothConnect.request();
+        await Future.delayed(const Duration(milliseconds: 500));
 
-        // Request Legacy Bluetooth permission (for older Android)
+        // Request Legacy Bluetooth permission
         debugPrint('Requesting Legacy Bluetooth permission...');
-        PermissionStatus legacyBtStatus = await Permission.bluetooth.request();
-        debugPrint('Legacy Bluetooth permission: $legacyBtStatus');
+        await Permission.bluetooth.request();
+        await Future.delayed(const Duration(milliseconds: 500));
 
-        // Request Bluetooth Advertise
-        PermissionStatus advStatus = await Permission.bluetoothAdvertise.status;
-        if (advStatus.isDenied) {
-          advStatus = await Permission.bluetoothAdvertise.request();
-        }
-        debugPrint('Bluetooth Advertise permission: $advStatus');
+        // Final check
+        final scanStatus = await Permission.bluetoothScan.status;
+        final connectStatus = await Permission.bluetoothConnect.status;
+        
+        debugPrint('Scan status: $scanStatus, Connect status: $connectStatus');
 
         if (scanStatus.isPermanentlyDenied || connectStatus.isPermanentlyDenied) {
           _connectionError = 'Bluetooth permissions are permanently denied. Please enable them in app settings.';
@@ -188,10 +197,14 @@ class AppState extends ChangeNotifier {
           return;
         }
 
-        if (!scanStatus.isGranted || !connectStatus.isGranted) {
-          _connectionError = 'Bluetooth permissions denied. On Android 12+, please allow "Nearby Devices" (Perangkat Terdekat) in app settings.';
-          notifyListeners();
-          return;
+        if (!scanStatus.isGranted && !kIsWeb) {
+          // If still not granted, maybe it's an older Android that needs location
+          final locStatus = await Permission.location.status;
+          if (!locStatus.isGranted) {
+            _connectionError = 'Location permission is required for Bluetooth scanning on this Android version.';
+            notifyListeners();
+            return;
+          }
         }
       } catch (e) {
         debugPrint('Permission request error: $e');
@@ -855,11 +868,25 @@ class DashboardPage extends StatelessWidget {
                       Text('Classic (HC-05) & BLE Support', style: TextStyle(fontSize: 8, color: Colors.white.withOpacity(0.2), letterSpacing: 1)),
                     ],
                   ),
-                  if (!state.isScanning && !state.isConnected)
-                    IconButton(
-                      icon: const Icon(Icons.refresh, size: 20, color: Color(0xFFEF4444)),
-                      onPressed: () => state.startClassicScan(),
-                    ),
+                  Row(
+                    children: [
+                      IconButton(
+                        icon: const Icon(Icons.security, size: 20, color: Colors.blue),
+                        onPressed: () async {
+                          final scan = await Permission.bluetoothScan.status;
+                          final connect = await Permission.bluetoothConnect.status;
+                          final loc = await Permission.location.status;
+                          state.setConnectionError('DEBUG: Scan=$scan, Connect=$connect, Loc=$loc');
+                        },
+                        tooltip: 'Check Permissions',
+                      ),
+                      if (!state.isScanning && !state.isConnected)
+                        IconButton(
+                          icon: const Icon(Icons.refresh, size: 20, color: Color(0xFFEF4444)),
+                          onPressed: () => state.startClassicScan(),
+                        ),
+                    ],
+                  ),
                 ],
               ),
               const SizedBox(height: 24),
