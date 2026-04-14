@@ -50,14 +50,7 @@ jobs:
           # 6. Fix Android Build Configuration (Standardized for Plugins)
           echo "Fixing Android build.gradle..."
           
-          # A. Brute-force fix for plugins in pub cache (Fixes flutter_blue_plus and others)
-          # This replaces the problematic 'flutter.compileSdkVersion' variables with hardcoded values
-          # to prevent "property not found" and "sdk not specified" errors in CI.
-          find /home/runner/.pub-cache -name "build.gradle" -exec sed -i 's/flutter.compileSdkVersion/34/g' {} +
-          find /home/runner/.pub-cache -name "build.gradle" -exec sed -i 's/flutter.targetSdkVersion/34/g' {} +
-          find /home/runner/.pub-cache -name "build.gradle" -exec sed -i 's/flutter.minSdkVersion/21/g' {} +
-          
-          # B. Standard 'ext' properties approach in the root build.gradle
+          # A. Standard 'ext' properties approach in the root build.gradle
           sed -i "/buildscript {/a \    ext.compileSdkVersion = 34\n    ext.targetSdkVersion = 34\n    ext.minSdkVersion = 21" android/build.gradle
 
           # C. Fix the main app's build.gradle
@@ -70,11 +63,21 @@ jobs:
           echo "flutter.targetSdkVersion=34" >> android/local.properties
           echo "flutter.minSdkVersion=21" >> android/local.properties
           
-          # 7. Get dependencies and analyze
+          # 7. Get dependencies
           flutter pub get
-          flutter analyze
           
-          # 8. Build APK
+          # 8. Brute-force fix for plugins in pub cache (CRITICAL: Must run AFTER flutter pub get)
+          # This replaces problematic 'flutter.xxx' variables with hardcoded values in all plugins.
+          echo "Applying brute-force fix to plugins..."
+          find /home/runner/.pub-cache -name "build.gradle" -exec sed -i 's/flutter.compileSdkVersion/34/g' {} +
+          find /home/runner/.pub-cache -name "build.gradle" -exec sed -i 's/flutter.compileSdk/34/g' {} +
+          find /home/runner/.pub-cache -name "build.gradle" -exec sed -i 's/flutter.targetSdkVersion/34/g' {} +
+          find /home/runner/.pub-cache -name "build.gradle" -exec sed -i 's/flutter.targetSdk/34/g' {} +
+          find /home/runner/.pub-cache -name "build.gradle" -exec sed -i 's/flutter.minSdkVersion/21/g' {} +
+          find /home/runner/.pub-cache -name "build.gradle" -exec sed -i 's/flutter.minSdk/21/g' {} +
+          
+          # 9. Analyze and Build
+          flutter analyze
           flutter build apk --release
 
       - name: Upload APK to Mirror (BashUpload)
