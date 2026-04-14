@@ -42,7 +42,18 @@ class AppState extends ChangeNotifier {
   
   // Racebox
   double _raceTime = 0;
+  double _raceDistance = 0;
   String _raceStatus = 'IDLE'; // IDLE, RUNNING, FINISHED
+  Timer? _raceTimer;
+  
+  // Performance Metrics
+  double? _zeroToHundred;
+  double? _twoHundredMeter;
+  double? _fourHundredMeter;
+  
+  // Simulation / Demo Mode
+  bool _isDemoMode = false;
+  Timer? _demoTimer;
   
   // Getters
   int get rpm => _rpm;
@@ -55,6 +66,10 @@ class AppState extends ChangeNotifier {
   String? get deviceName => _deviceName;
   double get raceTime => _raceTime;
   String get raceStatus => _raceStatus;
+  bool get isDemoMode => _isDemoMode;
+  double? get zeroToHundred => _zeroToHundred;
+  double? get twoHundredMeter => _twoHundredMeter;
+  double? get fourHundredMeter => _fourHundredMeter;
 
   AppState() {
     _loadSettings();
@@ -94,6 +109,81 @@ class AppState extends ChangeNotifier {
 
   void setRpmCalibration(double val) {
     _rpmCalibration = val;
+    notifyListeners();
+  }
+
+  void setTableRpm(int index, int val) {
+    _tableRpm[index] = val;
+    notifyListeners();
+  }
+
+  void setTableKill(int index, int val) {
+    _tableKill[index] = val;
+    notifyListeners();
+  }
+
+  void toggleDemoMode() {
+    _isDemoMode = !_isDemoMode;
+    if (_isDemoMode) {
+      _demoTimer = Timer.periodic(const Duration(milliseconds: 100), (timer) {
+        // Simulate RPM sweep
+        _rpm = (_rpm + 500) % 14000;
+        // Simulate Speed
+        if (_rpm > 10000) _speed = (_speed + 2) % 200;
+        notifyListeners();
+      });
+    } else {
+      _demoTimer?.cancel();
+      _rpm = 0;
+      _speed = 0;
+    }
+    notifyListeners();
+  }
+
+  void startRace() {
+    if (_raceStatus == 'RUNNING') return;
+    
+    _raceTime = 0;
+    _raceStatus = 'RUNNING';
+    _zeroToHundred = null;
+    _twoHundredMeter = null;
+    _fourHundredMeter = null;
+    
+    _raceTimer = Timer.periodic(const Duration(milliseconds: 10), (timer) {
+      _raceTime += 0.01;
+      
+      // Calculate distance (Speed is in km/h, convert to m/s)
+      double metersPerSecond = _speed / 3.6;
+      _raceDistance += metersPerSecond * 0.01;
+      
+      // Mock performance tracking
+      if (_speed >= 100 && _zeroToHundred == null) {
+        _zeroToHundred = _raceTime;
+      }
+      
+      if (_raceDistance >= 201 && _twoHundredMeter == null) {
+        _twoHundredMeter = _raceTime;
+      }
+      
+      if (_raceDistance >= 402 && _fourHundredMeter == null) {
+        _fourHundredMeter = _raceTime;
+        _raceStatus = 'FINISHED';
+        _raceTimer?.cancel();
+      }
+      
+      notifyListeners();
+    });
+    notifyListeners();
+  }
+
+  void resetRace() {
+    _raceTimer?.cancel();
+    _raceTime = 0;
+    _raceDistance = 0;
+    _raceStatus = 'IDLE';
+    _zeroToHundred = null;
+    _twoHundredMeter = null;
+    _fourHundredMeter = null;
     notifyListeners();
   }
 
@@ -245,7 +335,23 @@ class DashboardPage extends StatelessWidget {
                           Text('STEALTH HUD', style: GoogleFonts.orbitron(fontSize: 8, fontWeight: FontWeight.bold, color: isShiftPoint ? Colors.black : const Color(0xFFEF4444), letterSpacing: 2)),
                         ],
                       ),
-                      _buildStatusIndicator(state, isShiftPoint),
+                      Row(
+                        children: [
+                          GestureDetector(
+                            onTap: () => state.toggleDemoMode(),
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                              decoration: BoxDecoration(
+                                color: state.isDemoMode ? const Color(0xFFEF4444) : Colors.white.withOpacity(0.05),
+                                borderRadius: BorderRadius.circular(2),
+                              ),
+                              child: Text('DEMO', style: TextStyle(fontSize: 8, fontWeight: FontWeight.black, color: state.isDemoMode ? Colors.white : Colors.white20)),
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          _buildStatusIndicator(context, state, isShiftPoint),
+                        ],
+                      ),
                     ],
                   ),
                   
@@ -327,34 +433,81 @@ class DashboardPage extends StatelessWidget {
     );
   }
 
-  Widget _buildStatusIndicator(AppState state, bool isShiftPoint) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-      decoration: BoxDecoration(
-        color: isShiftPoint ? Colors.black.withOpacity(0.1) : Colors.white.withOpacity(0.05),
-        borderRadius: BorderRadius.circular(4),
-        border: Border.all(color: isShiftPoint ? Colors.black.withOpacity(0.2) : Colors.white.withOpacity(0.1)),
-      ),
-      child: Row(
-        children: [
-          Container(
-            width: 6,
-            height: 6,
-            decoration: BoxDecoration(
-              color: state.isConnected ? const Color(0xFF00FF00) : const Color(0xFFFF0000),
-              shape: BoxShape.circle,
+  Widget _buildStatusIndicator(BuildContext context, AppState state, bool isShiftPoint) {
+    return GestureDetector(
+      onTap: () => _showBluetoothMock(context, state),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+        decoration: BoxDecoration(
+          color: isShiftPoint ? Colors.black.withOpacity(0.1) : Colors.white.withOpacity(0.05),
+          borderRadius: BorderRadius.circular(4),
+          border: Border.all(color: isShiftPoint ? Colors.black.withOpacity(0.2) : Colors.white.withOpacity(0.1)),
+        ),
+        child: Row(
+          children: [
+            Container(
+              width: 6,
+              height: 6,
+              decoration: BoxDecoration(
+                color: state.isConnected ? const Color(0xFF00FF00) : const Color(0xFFFF0000),
+                shape: BoxShape.circle,
+              ),
             ),
-          ),
-          const SizedBox(width: 6),
-          Text(state.isConnected ? 'LIVE' : 'DISCONNECTED', 
-            style: TextStyle(
-              fontSize: 8, 
-              fontWeight: FontWeight.w900, 
-              color: isShiftPoint ? Colors.black : Colors.white
-            )
-          ),
-        ],
+            const SizedBox(width: 6),
+            Text(state.isConnected ? 'LIVE' : 'DISCONNECTED', 
+              style: TextStyle(
+                fontSize: 8, 
+                fontWeight: FontWeight.w900, 
+                color: isShiftPoint ? Colors.black : Colors.white
+              )
+            ),
+          ],
+        ),
       ),
+    );
+  }
+
+  void _showBluetoothMock(BuildContext context, AppState state) {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: const Color(0xFF0A0A0A),
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
+      builder: (context) => Container(
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('BLUETOOTH SCANNER', style: GoogleFonts.orbitron(fontSize: 12, fontWeight: FontWeight.bold, letterSpacing: 2)),
+            const SizedBox(height: 24),
+            if (state.isConnected) ...[
+              _buildDeviceTile('ANTASENA-QS-V2', 'CONNECTED', true, () {
+                state.setConnected(false);
+                Navigator.pop(context);
+              }),
+            ] else ...[
+              _buildDeviceTile('ANTASENA-QS-V2', 'SIGNAL: -65dBm', false, () {
+                state.setConnected(true);
+                Navigator.pop(context);
+              }),
+              _buildDeviceTile('RACEBOX-MINI-2', 'SIGNAL: -72dBm', false, () {}),
+              const SizedBox(height: 16),
+              const Center(child: CircularProgressIndicator(strokeWidth: 2, color: Color(0xFFEF4444))),
+            ],
+            const SizedBox(height: 24),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildDeviceTile(String name, String status, bool connected, VoidCallback onTap) {
+    return ListTile(
+      onTap: onTap,
+      contentPadding: EdgeInsets.zero,
+      title: Text(name, style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold)),
+      subtitle: Text(status, style: TextStyle(fontSize: 10, color: connected ? const Color(0xFF00FF00) : Colors.white24)),
+      trailing: Icon(connected ? Icons.bluetooth_connected : Icons.bluetooth, color: connected ? const Color(0xFF00FF00) : Colors.white10),
     );
   }
 
@@ -422,14 +575,19 @@ class TuningPage extends StatelessWidget {
             _buildSectionHeader('QUICKSHIFTER CONFIG'),
             const SizedBox(height: 20),
             
-            _buildStealthTuningCard('MINIMUM RPM', state.minRpmActive.round().toString(), 'RPM'),
+            GestureDetector(
+              onTap: () => _showEditDialog(context, 'MINIMUM RPM', state.minRpmActive.round().toString(), (val) {
+                state.setMinRpm(double.tryParse(val) ?? 3000);
+              }),
+              child: _buildStealthTuningCard('MINIMUM RPM', state.minRpmActive.round().toString(), 'RPM'),
+            ),
             const SizedBox(height: 16),
             _buildStealthCalibrationSelector(state),
             
             const SizedBox(height: 32),
             _buildSectionHeader('KILL TIME MATRIX'),
             const SizedBox(height: 20),
-            _buildStealthKillMatrix(state),
+            _buildStealthKillMatrix(context, state),
             
             const SizedBox(height: 40),
             
@@ -536,7 +694,7 @@ class TuningPage extends StatelessWidget {
     );
   }
 
-  Widget _buildStealthKillMatrix(AppState state) {
+  Widget _buildStealthKillMatrix(BuildContext context, AppState state) {
     return Container(
       decoration: BoxDecoration(
         border: Border.all(color: Colors.white.withOpacity(0.05)),
@@ -565,12 +723,57 @@ class TuningPage extends StatelessWidget {
               child: Row(
                 children: [
                   Expanded(child: Text('S${i+1}', style: const TextStyle(color: Color(0xFFEF4444), fontWeight: FontWeight.w900, fontSize: 12))),
-                  Expanded(flex: 2, child: Text(state.tableRpm[i].toString(), style: GoogleFonts.jetBrainsMono(fontWeight: FontWeight.bold, fontSize: 14))),
-                  Expanded(child: Text(state.tableKill[i].toString(), style: GoogleFonts.jetBrainsMono(fontWeight: FontWeight.bold, fontSize: 14, color: const Color(0xFF00FF00)))),
+                  Expanded(
+                    flex: 2, 
+                    child: GestureDetector(
+                      onTap: () => _showEditDialog(context, 'RPM THRESHOLD S${i+1}', state.tableRpm[i].toString(), (val) {
+                        state.setTableRpm(i, int.tryParse(val) ?? 0);
+                      }),
+                      child: Text(state.tableRpm[i].toString(), style: GoogleFonts.jetBrainsMono(fontWeight: FontWeight.bold, fontSize: 14))
+                    )
+                  ),
+                  Expanded(
+                    child: GestureDetector(
+                      onTap: () => _showEditDialog(context, 'KILL TIME S${i+1}', state.tableKill[i].toString(), (val) {
+                        state.setTableKill(i, int.tryParse(val) ?? 0);
+                      }),
+                      child: Text(state.tableKill[i].toString(), style: GoogleFonts.jetBrainsMono(fontWeight: FontWeight.bold, fontSize: 14, color: const Color(0xFF00FF00)))
+                    )
+                  ),
                 ],
               ),
             );
           }),
+        ],
+      ),
+    );
+  }
+
+  void _showEditDialog(BuildContext context, String title, String current, Function(String) onSave) {
+    final controller = TextEditingController(text: current);
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: const Color(0xFF0A0A0A),
+        title: Text(title, style: GoogleFonts.orbitron(fontSize: 12, fontWeight: FontWeight.bold)),
+        content: TextField(
+          controller: controller,
+          keyboardType: TextInputType.number,
+          style: GoogleFonts.jetBrainsMono(),
+          decoration: const InputDecoration(
+            enabledBorder: UnderlineInputBorder(borderSide: BorderSide(color: Colors.white10)),
+            focusedBorder: UnderlineInputBorder(borderSide: BorderSide(color: Color(0xFFEF4444))),
+          ),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context), child: const Text('CANCEL', style: TextStyle(color: Colors.white24))),
+          TextButton(
+            onPressed: () {
+              onSave(controller.text);
+              Navigator.pop(context);
+            }, 
+            child: const Text('SAVE', style: TextStyle(color: Color(0xFFEF4444)))
+          ),
         ],
       ),
     );
@@ -620,9 +823,13 @@ class RaceboxPage extends StatelessWidget {
                   Row(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      _buildStealthRaceButton('START', const Color(0xFF00FF00), () {}),
+                      _buildStealthRaceButton(
+                        state.raceStatus == 'RUNNING' ? 'STOP' : 'START', 
+                        state.raceStatus == 'RUNNING' ? const Color(0xFFEF4444) : const Color(0xFF00FF00), 
+                        () => state.raceStatus == 'RUNNING' ? state.resetRace() : state.startRace()
+                      ),
                       const SizedBox(width: 12),
-                      _buildStealthRaceButton('RESET', Colors.white.withOpacity(0.05), () {}),
+                      _buildStealthRaceButton('RESET', Colors.white.withOpacity(0.05), () => state.resetRace()),
                     ],
                   ),
                 ],
@@ -641,9 +848,9 @@ class RaceboxPage extends StatelessWidget {
             ),
             const SizedBox(height: 20),
             
-            _buildStealthMetricRow('0-100 KM/H', '-- s'),
-            _buildStealthMetricRow('201 METER', '-- s'),
-            _buildStealthMetricRow('402 METER', '-- s'),
+            _buildStealthMetricRow('0-100 KM/H', state.zeroToHundred != null ? '${state.zeroToHundred!.toStringAsFixed(2)} s' : '-- s'),
+            _buildStealthMetricRow('201 METER', state.twoHundredMeter != null ? '${state.twoHundredMeter!.toStringAsFixed(2)} s' : '-- s'),
+            _buildStealthMetricRow('402 METER', state.fourHundredMeter != null ? '${state.fourHundredMeter!.toStringAsFixed(2)} s' : '-- s'),
           ],
         ),
       ),
@@ -652,19 +859,22 @@ class RaceboxPage extends StatelessWidget {
 
   Widget _buildStealthRaceButton(String label, Color color, VoidCallback onTap) {
     bool isAction = color != Colors.white.withOpacity(0.05);
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 16),
-      decoration: BoxDecoration(
-        color: color,
-        borderRadius: BorderRadius.circular(2),
-      ),
-      child: Text(label, 
-        style: TextStyle(
-          fontWeight: FontWeight.w900, 
-          fontSize: 10, 
-          letterSpacing: 1,
-          color: isAction ? Colors.black : Colors.white
-        )
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 16),
+        decoration: BoxDecoration(
+          color: color,
+          borderRadius: BorderRadius.circular(2),
+        ),
+        child: Text(label, 
+          style: TextStyle(
+            fontWeight: FontWeight.w900, 
+            fontSize: 10, 
+            letterSpacing: 1,
+            color: isAction ? Colors.black : Colors.white
+          )
+        ),
       ),
     );
   }
