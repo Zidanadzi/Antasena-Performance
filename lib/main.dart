@@ -43,6 +43,7 @@ class AppState extends ChangeNotifier {
   // Connection
   bool _isConnected = false;
   bool _isScanning = false;
+  bool _isConnecting = false;
   String? _deviceName;
   String? _connectionError;
   classic.BluetoothConnection? _classicConnection;
@@ -79,6 +80,7 @@ class AppState extends ChangeNotifier {
   List<int> get tableKill => _tableKill;
   bool get isConnected => _isConnected;
   bool get isScanning => _isScanning;
+  bool get isConnecting => _isConnecting;
   String? get deviceName => _deviceName;
   String? get connectionError => _connectionError;
   List<classic.BluetoothDevice> get classicDevices => _classicDevices;
@@ -147,16 +149,34 @@ class AppState extends ChangeNotifier {
 
       // Request Permissions for Android
       try {
-        Map<Permission, PermissionStatus> statuses = await [
-          Permission.bluetoothScan,
-          Permission.bluetoothConnect,
-          Permission.bluetoothAdvertise,
-          Permission.location,
-        ].request();
+        debugPrint('Requesting Bluetooth permissions...');
+        
+        // Request Location first as it's often the trigger
+        PermissionStatus locStatus = await Permission.location.request();
+        debugPrint('Location permission: $locStatus');
 
-        if (statuses[Permission.bluetoothScan] != PermissionStatus.granted ||
-            statuses[Permission.bluetoothConnect] != PermissionStatus.granted) {
-          _connectionError = 'Bluetooth permissions denied. Please enable them in settings.';
+        // Request Bluetooth Scan
+        PermissionStatus scanStatus = await Permission.bluetoothScan.status;
+        if (scanStatus.isDenied) {
+          scanStatus = await Permission.bluetoothScan.request();
+        }
+        debugPrint('Bluetooth Scan permission: $scanStatus');
+
+        // Request Bluetooth Connect
+        PermissionStatus connectStatus = await Permission.bluetoothConnect.status;
+        if (connectStatus.isDenied) {
+          connectStatus = await Permission.bluetoothConnect.request();
+        }
+        debugPrint('Bluetooth Connect permission: $connectStatus');
+
+        if (scanStatus.isPermanentlyDenied || connectStatus.isPermanentlyDenied) {
+          _connectionError = 'Bluetooth permissions are permanently denied. Please enable them in app settings.';
+          notifyListeners();
+          return;
+        }
+
+        if (!scanStatus.isGranted || !connectStatus.isGranted) {
+          _connectionError = 'Bluetooth permissions denied (Scan: $scanStatus, Connect: $connectStatus). Please enable them in settings.';
           notifyListeners();
           return;
         }
@@ -229,11 +249,17 @@ class AppState extends ChangeNotifier {
   }
 
   Future<void> connectToClassic(classic.BluetoothDevice device) async {
+    if (_isConnecting) return;
+    
     try {
+      _isConnecting = true;
       _connectionError = null;
+      notifyListeners();
+
       if (kIsWeb || device.address.contains('MOCK')) {
-        // Mock connection for Web
+        await Future.delayed(const Duration(seconds: 1));
         _isScanning = false;
+        _isConnecting = false;
         _isConnected = true;
         _deviceName = device.name ?? device.address;
         notifyListeners();
@@ -241,6 +267,7 @@ class AppState extends ChangeNotifier {
       }
 
       if (defaultTargetPlatform != TargetPlatform.android) {
+        _isConnecting = false;
         _connectionError = 'Bluetooth Classic is only supported on Android.';
         notifyListeners();
         return;
@@ -248,7 +275,9 @@ class AppState extends ChangeNotifier {
 
       // Ensure discovery is stopped before connecting
       try {
+        debugPrint('Cancelling discovery before connection...');
         await classic.FlutterBluetoothSerial.instance.cancelDiscovery();
+        await Future.delayed(const Duration(milliseconds: 500));
       } catch (e) {
         debugPrint('Cancel discovery error: $e');
       }
@@ -256,8 +285,23 @@ class AppState extends ChangeNotifier {
       _isScanning = false;
       notifyListeners();
       
-      _classicConnection = await classic.BluetoothConnection.toAddress(device.address).timeout(const Duration(seconds: 10));
+      // Double check if Bluetooth is still enabled
+      bool? isEnabled = await classic.FlutterBluetoothSerial.instance.isEnabled;
+      if (isEnabled != true) {
+        _isConnecting = false;
+        _connectionError = 'Bluetooth was disabled. Please enable it and try again.';
+        notifyListeners();
+        return;
+      }
+
+      debugPrint('Connecting to ${device.address}...');
+      _classicConnection = await classic.BluetoothConnection.toAddress(device.address)
+          .timeout(const Duration(seconds: 15), onTimeout: () {
+            throw TimeoutException('Connection timed out after 15 seconds');
+          });
+          
       _isConnected = true;
+      _isConnecting = false;
       _deviceName = device.name ?? device.address;
       
       _classicConnection!.input!.listen((Uint8List data) {
@@ -267,6 +311,7 @@ class AppState extends ChangeNotifier {
           if (val != null) updateRpm(val);
         }
       }).onDone(() {
+        debugPrint('Connection closed by remote device');
         _isConnected = false;
         _deviceName = null;
         notifyListeners();
@@ -276,12 +321,17 @@ class AppState extends ChangeNotifier {
     } catch (e) {
       debugPrint('Global Connect Error: $e');
       _isConnected = false;
+      _isConnecting = false;
       _connectionError = 'Connection failed: ${e.toString()}';
-      if (e.toString().contains('Discovery')) {
+      
+      if (e is TimeoutException) {
+        _connectionError = 'Connection timed out. Is the HC-05 powered on and in range?';
+      } else if (e.toString().contains('Discovery')) {
         _connectionError = 'Device not found. Make sure it is paired and in range.';
       } else if (e.toString().contains('Connection refused')) {
         _connectionError = 'Connection refused. Try restarting the HC-05 module.';
       }
+      
       notifyListeners();
     }
   }
@@ -777,16 +827,28 @@ class DashboardPage extends StatelessWidget {
                     borderRadius: BorderRadius.circular(8),
                     border: Border.all(color: Colors.red.withOpacity(0.3)),
                   ),
-                  child: Row(
+                  child: Column(
                     children: [
-                      const Icon(Icons.error_outline, color: Colors.red, size: 16),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: Text(
-                          state.connectionError!,
-                          style: const TextStyle(color: Colors.red, fontSize: 10, fontWeight: FontWeight.bold),
-                        ),
+                      Row(
+                        children: [
+                          const Icon(Icons.error_outline, color: Colors.red, size: 16),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: Text(
+                              state.connectionError!,
+                              style: const TextStyle(color: Colors.red, fontSize: 10, fontWeight: FontWeight.bold),
+                            ),
+                          ),
+                        ],
                       ),
+                      if (state.connectionError!.contains('permissions'))
+                        Padding(
+                          padding: const EdgeInsets.only(top: 8.0),
+                          child: TextButton(
+                            onPressed: () => openAppSettings(),
+                            child: const Text('OPEN SETTINGS', style: TextStyle(color: Colors.white, fontSize: 9, fontWeight: FontWeight.bold)),
+                          ),
+                        ),
                     ],
                   ),
                 ),
@@ -816,7 +878,7 @@ class DashboardPage extends StatelessWidget {
                   controller: scrollController,
                   children: [
                     if (state.isConnected) ...[
-                      _buildDeviceTile(state.deviceName ?? 'DEVICE', 'CONNECTED', true, () {
+                      _buildDeviceTile(state.deviceName ?? 'DEVICE', 'CONNECTED', true, false, () {
                         state.disconnectClassic();
                         Navigator.pop(context);
                       }),
@@ -829,9 +891,11 @@ class DashboardPage extends StatelessWidget {
                           device.name ?? 'Unknown Device', 
                           device.address, 
                           false, 
+                          state.isConnecting,
                           () {
-                            state.connectToClassic(device);
-                            Navigator.pop(context);
+                            if (!state.isConnecting) {
+                              state.connectToClassic(device);
+                            }
                           }
                         )),
                       ] else if (!state.isScanning) ...[
@@ -874,13 +938,15 @@ class DashboardPage extends StatelessWidget {
     });
   }
 
-  Widget _buildDeviceTile(String name, String status, bool connected, VoidCallback onTap) {
+  Widget _buildDeviceTile(String name, String status, bool connected, bool isConnecting, VoidCallback onTap) {
     return ListTile(
-      onTap: onTap,
+      onTap: isConnecting ? null : onTap,
       contentPadding: EdgeInsets.zero,
       title: Text(name, style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold)),
       subtitle: Text(status, style: TextStyle(fontSize: 10, color: connected ? const Color(0xFF00FF00) : Colors.white24)),
-      trailing: Icon(connected ? Icons.bluetooth_connected : Icons.bluetooth, color: connected ? const Color(0xFF00FF00) : Colors.white10),
+      trailing: isConnecting 
+        ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: Color(0xFFEF4444)))
+        : Icon(connected ? Icons.bluetooth_connected : Icons.bluetooth, color: connected ? const Color(0xFF00FF00) : Colors.white10),
     );
   }
 
