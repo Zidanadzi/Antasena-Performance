@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter/foundation.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
 import 'dart:async';
@@ -42,6 +43,7 @@ class AppState extends ChangeNotifier {
   bool _isConnected = false;
   bool _isScanning = false;
   String? _deviceName;
+  String? _connectionError;
   classic.BluetoothConnection? _classicConnection;
   List<classic.BluetoothDevice> _classicDevices = [];
   
@@ -77,6 +79,7 @@ class AppState extends ChangeNotifier {
   bool get isConnected => _isConnected;
   bool get isScanning => _isScanning;
   String? get deviceName => _deviceName;
+  String? get connectionError => _connectionError;
   List<classic.BluetoothDevice> get classicDevices => _classicDevices;
   double get raceTime => _raceTime;
   String get raceStatus => _raceStatus;
@@ -118,10 +121,35 @@ class AppState extends ChangeNotifier {
   }
 
   Future<void> startClassicScan() async {
+    _connectionError = null;
+    if (kIsWeb) {
+      // Mock scanning for Web
+      _isScanning = true;
+      _classicDevices = [];
+      notifyListeners();
+      
+      await Future.delayed(const Duration(seconds: 2));
+      _classicDevices = [
+        // Mock devices
+        classic.BluetoothDevice(name: 'HC-05 (MOCK)', address: '00:11:22:33:44:55', bonded: true),
+        classic.BluetoothDevice(name: 'HC-06 (MOCK)', address: 'AA:BB:CC:DD:EE:FF'),
+      ];
+      _isScanning = false;
+      notifyListeners();
+      return;
+    }
+
     // Check if Bluetooth is enabled
-    bool? isEnabled = await classic.FlutterBluetoothSerial.instance.isEnabled;
-    if (isEnabled == false) {
-      await classic.FlutterBluetoothSerial.instance.requestEnable();
+    try {
+      bool? isEnabled = await classic.FlutterBluetoothSerial.instance.isEnabled;
+      if (isEnabled == false) {
+        await classic.FlutterBluetoothSerial.instance.requestEnable();
+      }
+    } catch (e) {
+      debugPrint('Bluetooth not supported or error: $e');
+      _isScanning = false;
+      notifyListeners();
+      return;
     }
 
     _isScanning = true;
@@ -155,6 +183,16 @@ class AppState extends ChangeNotifier {
   }
 
   Future<void> connectToClassic(classic.BluetoothDevice device) async {
+    _connectionError = null;
+    if (kIsWeb || device.address.contains('MOCK')) {
+      // Mock connection for Web
+      _isScanning = false;
+      _isConnected = true;
+      _deviceName = device.name ?? device.address;
+      notifyListeners();
+      return;
+    }
+
     try {
       _isScanning = false;
       _classicConnection = await classic.BluetoothConnection.toAddress(device.address);
@@ -178,6 +216,12 @@ class AppState extends ChangeNotifier {
       notifyListeners();
     } catch (e) {
       _isConnected = false;
+      _connectionError = 'Connection failed: ${e.toString()}';
+      if (e.toString().contains('Discovery')) {
+        _connectionError = 'Device not found. Make sure it is paired and in range.';
+      } else if (e.toString().contains('Connection refused')) {
+        _connectionError = 'Connection refused. Try restarting the HC-05 module.';
+      }
       notifyListeners();
     }
   }
@@ -619,11 +663,11 @@ class DashboardPage extends StatelessWidget {
       isScanning: state.isScanning,
       deviceName: state.deviceName,
       isShiftPoint: isShiftPoint,
-      onTap: () => _showBluetoothMock(context, state),
+      onTap: () => _showBluetoothScanner(context, state),
     );
   }
 
-  void _showBluetoothMock(BuildContext context, AppState state) {
+  void _showBluetoothScanner(BuildContext context, AppState state) {
     if (!state.isConnected) {
       state.startClassicScan();
     }
@@ -662,6 +706,28 @@ class DashboardPage extends StatelessWidget {
                 ],
               ),
               const SizedBox(height: 24),
+              if (state.connectionError != null)
+                Container(
+                  margin: const EdgeInsets.only(bottom: 20),
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: Colors.red.withOpacity(0.1),
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: Colors.red.withOpacity(0.3)),
+                  ),
+                  child: Row(
+                    children: [
+                      const Icon(Icons.error_outline, color: Colors.red, size: 16),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Text(
+                          state.connectionError!,
+                          style: const TextStyle(color: Colors.red, fontSize: 10, fontWeight: FontWeight.bold),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
               if (state.isScanning)
                 Container(
                   margin: const EdgeInsets.only(bottom: 20),
