@@ -47,13 +47,32 @@ jobs:
           cp -r custom_backup/lib .
           cp custom_backup/pubspec.yaml .
           
-          # 6. Fix Android Build Configuration
+          # 6. Fix Android Build Configuration (Standardized for Plugins)
           echo "Fixing Android build.gradle..."
+          
+          # Force all subprojects (plugins) to use the correct SDK versions
+          cat <<EOF >> android/build.gradle
+subprojects {
+    afterEvaluate { project ->
+        if (project.extensions.findByName("android") != null) {
+            project.android {
+                compileSdkVersion 34
+                buildToolsVersion "34.0.0"
+                defaultConfig {
+                    targetSdkVersion 34
+                }
+            }
+        }
+    }
+}
+EOF
+
+          # Also fix the main app's build.gradle
           sed -i 's/compileSdkVersion flutter.compileSdkVersion/compileSdkVersion 34/g' android/app/build.gradle
           sed -i 's/targetSdkVersion flutter.targetSdkVersion/targetSdkVersion 34/g' android/app/build.gradle
           sed -i 's/minSdkVersion flutter.minSdkVersion/minSdkVersion 21/g' android/app/build.gradle
           
-          # Ensure local.properties is correctly populated
+          # Ensure local.properties is correctly populated for the Flutter tools
           echo "flutter.compileSdkVersion=34" >> android/local.properties
           echo "flutter.targetSdkVersion=34" >> android/local.properties
           echo "flutter.minSdkVersion=21" >> android/local.properties
