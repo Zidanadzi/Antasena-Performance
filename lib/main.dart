@@ -47,6 +47,7 @@ class AppState extends ChangeNotifier {
   String? _deviceName;
   String? _connectionError;
   classic.BluetoothConnection? _classicConnection;
+  StreamSubscription? _btSubscription;
   List<classic.BluetoothDevice> _classicDevices = [];
   
   // Racebox
@@ -152,30 +153,27 @@ class AppState extends ChangeNotifier {
         debugPrint('Requesting Bluetooth permissions...');
         
         // Request Location first as it's often the trigger
+        debugPrint('Requesting Location permission...');
         PermissionStatus locStatus = await Permission.location.request();
-        debugPrint('Location permission: $locStatus');
-        
         if (locStatus.isDenied) {
           locStatus = await Permission.locationWhenInUse.request();
         }
-
-        // Request Legacy Bluetooth permission
-        PermissionStatus legacyBtStatus = await Permission.bluetooth.request();
-        debugPrint('Legacy Bluetooth permission: $legacyBtStatus');
+        debugPrint('Location permission: $locStatus');
 
         // Request Bluetooth Scan
-        PermissionStatus scanStatus = await Permission.bluetoothScan.status;
-        if (scanStatus.isDenied) {
-          scanStatus = await Permission.bluetoothScan.request();
-        }
+        debugPrint('Requesting Bluetooth Scan permission...');
+        PermissionStatus scanStatus = await Permission.bluetoothScan.request();
         debugPrint('Bluetooth Scan permission: $scanStatus');
 
         // Request Bluetooth Connect
-        PermissionStatus connectStatus = await Permission.bluetoothConnect.status;
-        if (connectStatus.isDenied) {
-          connectStatus = await Permission.bluetoothConnect.request();
-        }
+        debugPrint('Requesting Bluetooth Connect permission...');
+        PermissionStatus connectStatus = await Permission.bluetoothConnect.request();
         debugPrint('Bluetooth Connect permission: $connectStatus');
+
+        // Request Legacy Bluetooth permission (for older Android)
+        debugPrint('Requesting Legacy Bluetooth permission...');
+        PermissionStatus legacyBtStatus = await Permission.bluetooth.request();
+        debugPrint('Legacy Bluetooth permission: $legacyBtStatus');
 
         // Request Bluetooth Advertise
         PermissionStatus advStatus = await Permission.bluetoothAdvertise.status;
@@ -265,6 +263,9 @@ class AppState extends ChangeNotifier {
 
   Future<void> connectToClassic(classic.BluetoothDevice device) async {
     if (_isConnecting) return;
+    if (_isConnected) {
+      await disconnectClassic();
+    }
     
     try {
       _isConnecting = true;
@@ -319,17 +320,21 @@ class AppState extends ChangeNotifier {
       _isConnecting = false;
       _deviceName = device.name ?? device.address;
       
-      _classicConnection!.input!.listen((Uint8List data) {
+      _btSubscription = _classicConnection!.input!.listen((Uint8List data) {
         String msg = String.fromCharCodes(data);
         if (msg.contains('RPM:')) {
           int? val = int.tryParse(msg.split(':')[1].trim());
           if (val != null) updateRpm(val);
         }
-      }).onDone(() {
+      });
+      
+      _btSubscription!.onDone(() {
         debugPrint('Connection closed by remote device');
-        _isConnected = false;
-        _deviceName = null;
-        notifyListeners();
+        if (_isConnected) {
+          _isConnected = false;
+          _deviceName = null;
+          notifyListeners();
+        }
       });
       
       notifyListeners();
@@ -351,12 +356,28 @@ class AppState extends ChangeNotifier {
     }
   }
 
-  void disconnectClassic() {
-    _classicConnection?.dispose();
-    _classicConnection = null;
-    _isConnected = false;
-    _deviceName = null;
-    notifyListeners();
+  Future<void> disconnectClassic() async {
+    try {
+      debugPrint('Disconnecting from Bluetooth...');
+      await _btSubscription?.cancel();
+      _btSubscription = null;
+      
+      if (_classicConnection != null) {
+        try {
+          await _classicConnection!.close();
+        } catch (e) {
+          debugPrint('Error closing connection: $e');
+        }
+        _classicConnection = null;
+      }
+    } catch (e) {
+      debugPrint('Error during disconnect: $e');
+      _classicConnection = null;
+    } finally {
+      _isConnected = false;
+      _deviceName = null;
+      notifyListeners();
+    }
   }
 
   void updateRaceTime(double val) {
@@ -517,6 +538,15 @@ class AppState extends ChangeNotifier {
     await prefs.setStringList('tableRpm', _tableRpm.map((e) => e.toString()).toList());
     await prefs.setStringList('tableKill', _tableKill.map((e) => e.toString()).toList());
     notifyListeners();
+  }
+
+  @override
+  void dispose() {
+    _demoTimer?.cancel();
+    _raceTimer?.cancel();
+    _btSubscription?.cancel();
+    _classicConnection?.close();
+    super.dispose();
   }
 }
 
@@ -893,9 +923,9 @@ class DashboardPage extends StatelessWidget {
                   controller: scrollController,
                   children: [
                     if (state.isConnected) ...[
-                      _buildDeviceTile(state.deviceName ?? 'DEVICE', 'CONNECTED', true, false, () {
-                        state.disconnectClassic();
-                        Navigator.pop(context);
+                      _buildDeviceTile(state.deviceName ?? 'DEVICE', 'DISCONNECT', true, false, () async {
+                        await state.disconnectClassic();
+                        if (context.mounted) Navigator.pop(context);
                       }),
                     ] else ...[
                       // Bonded/Paired Devices (HC-05 usually here)
@@ -904,7 +934,7 @@ class DashboardPage extends StatelessWidget {
                         const SizedBox(height: 12),
                         ...state.classicDevices.map((device) => _buildDeviceTile(
                           device.name ?? 'Unknown Device', 
-                          device.address, 
+                          state.isConnecting ? 'CONNECTING...' : 'CONNECT', 
                           false, 
                           state.isConnecting,
                           () {
@@ -958,7 +988,7 @@ class DashboardPage extends StatelessWidget {
       onTap: isConnecting ? null : onTap,
       contentPadding: EdgeInsets.zero,
       title: Text(name, style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold)),
-      subtitle: Text(status, style: TextStyle(fontSize: 10, color: connected ? const Color(0xFF00FF00) : Colors.white24)),
+      subtitle: Text(status, style: TextStyle(fontSize: 10, color: connected ? const Color(0xFF00FF00) : (status == 'CONNECT' ? const Color(0xFFEF4444) : Colors.white24))),
       trailing: isConnecting 
         ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: Color(0xFFEF4444)))
         : Icon(connected ? Icons.bluetooth_connected : Icons.bluetooth, color: connected ? const Color(0xFF00FF00) : Colors.white10),
