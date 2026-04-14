@@ -191,6 +191,9 @@ class AppState extends ChangeNotifier {
 
         final scanStatus = statuses[Permission.bluetoothScan] ?? PermissionStatus.denied;
         final connectStatus = statuses[Permission.bluetoothConnect] ?? PermissionStatus.denied;
+        final btStatus = statuses[Permission.bluetooth] ?? PermissionStatus.denied;
+        
+        debugPrint('Scan: $scanStatus, Connect: $connectStatus, BT: $btStatus');
         
         if (scanStatus.isPermanentlyDenied || connectStatus.isPermanentlyDenied) {
           _connectionError = 'Bluetooth permissions are permanently denied. Please enable "Nearby Devices" in app settings.';
@@ -893,8 +896,9 @@ class DashboardPage extends StatelessWidget {
                         onPressed: () async {
                           final scan = await Permission.bluetoothScan.status;
                           final connect = await Permission.bluetoothConnect.status;
+                          final bt = await Permission.bluetooth.status;
                           final loc = await Permission.location.status;
-                          state.setConnectionError('DEBUG: Scan=$scan, Connect=$connect, Loc=$loc');
+                          state.setConnectionError('DEBUG: Scan=$scan, Connect=$connect, BT=$bt, Loc=$loc');
                         },
                         tooltip: 'Check Permissions',
                       ),
