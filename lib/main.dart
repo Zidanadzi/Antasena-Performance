@@ -3,8 +3,10 @@ import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
 import 'dart:async';
+import 'dart:typed_data';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:geolocator/geolocator.dart';
+import 'package:flutter_bluetooth_serial/flutter_bluetooth_serial.dart' as classic;
 // import 'package:flutter_blue_plus/flutter_blue_plus.dart';
 
 void main() {
@@ -38,7 +40,10 @@ class AppState extends ChangeNotifier {
   
   // Connection
   bool _isConnected = false;
+  bool _isScanning = false;
   String? _deviceName;
+  classic.BluetoothConnection? _classicConnection;
+  List<classic.BluetoothDevice> _classicDevices = [];
   
   // Racebox
   double _raceTime = 0;
@@ -55,6 +60,9 @@ class AppState extends ChangeNotifier {
   bool _isDemoMode = false;
   Timer? _demoTimer;
   
+  // GPS Data
+  double _gpsAccuracy = 0;
+  
   // Getters
   int get rpm => _rpm;
   double get speed => _speed;
@@ -63,13 +71,16 @@ class AppState extends ChangeNotifier {
   List<int> get tableRpm => _tableRpm;
   List<int> get tableKill => _tableKill;
   bool get isConnected => _isConnected;
+  bool get isScanning => _isScanning;
   String? get deviceName => _deviceName;
+  List<classic.BluetoothDevice> get classicDevices => _classicDevices;
   double get raceTime => _raceTime;
   String get raceStatus => _raceStatus;
   bool get isDemoMode => _isDemoMode;
   double? get zeroToHundred => _zeroToHundred;
   double? get twoHundredMeter => _twoHundredMeter;
   double? get fourHundredMeter => _fourHundredMeter;
+  double get gpsAccuracy => _gpsAccuracy;
 
   AppState() {
     _loadSettings();
@@ -87,8 +98,83 @@ class AppState extends ChangeNotifier {
     notifyListeners();
   }
 
-  void setConnected(bool val) {
+  void setConnected(bool val, {String? name}) {
     _isConnected = val;
+    _deviceName = val ? name : null;
+    _isScanning = false;
+    notifyListeners();
+  }
+
+  void setScanning(bool val) {
+    _isScanning = val;
+    if (val) _isConnected = false;
+    notifyListeners();
+  }
+
+  Future<void> startClassicScan() async {
+    _isScanning = true;
+    _classicDevices = [];
+    notifyListeners();
+
+    try {
+      // Get bonded devices first (HC-05 is usually paired manually in Android settings)
+      _classicDevices = await classic.FlutterBluetoothSerial.instance.getBondedDevices();
+      notifyListeners();
+      
+      // Also start discovery for new devices
+      classic.FlutterBluetoothSerial.instance.startDiscovery().listen((r) {
+        final existingIndex = _classicDevices.indexWhere((element) => element.address == r.device.address);
+        if (existingIndex >= 0) {
+          _classicDevices[existingIndex] = r.device;
+        } else {
+          _classicDevices.add(r.device);
+        }
+        notifyListeners();
+      });
+
+      Future.delayed(const Duration(seconds: 10), () {
+        _isScanning = false;
+        notifyListeners();
+      });
+    } catch (e) {
+      _isScanning = false;
+      notifyListeners();
+    }
+  }
+
+  Future<void> connectToClassic(classic.BluetoothDevice device) async {
+    try {
+      _isScanning = false;
+      _classicConnection = await classic.BluetoothConnection.toAddress(device.address);
+      _isConnected = true;
+      _deviceName = device.name ?? device.address;
+      
+      _classicConnection!.input!.listen((Uint8List data) {
+        // Handle incoming data from HC-05 here
+        // Example: Parsing RPM data sent as string
+        String msg = String.fromCharCodes(data);
+        if (msg.contains('RPM:')) {
+          int? val = int.tryParse(msg.split(':')[1].trim());
+          if (val != null) updateRpm(val);
+        }
+      }).onDone(() {
+        _isConnected = false;
+        _deviceName = null;
+        notifyListeners();
+      });
+      
+      notifyListeners();
+    } catch (e) {
+      _isConnected = false;
+      notifyListeners();
+    }
+  }
+
+  void disconnectClassic() {
+    _classicConnection?.dispose();
+    _classicConnection = null;
+    _isConnected = false;
+    _deviceName = null;
     notifyListeners();
   }
 
@@ -205,6 +291,7 @@ class AppState extends ChangeNotifier {
       ),
     ).listen((Position position) {
       _speed = position.speed * 3.6; // m/s to km/h
+      _gpsAccuracy = position.accuracy;
       notifyListeners();
     });
   }
@@ -434,68 +521,91 @@ class DashboardPage extends StatelessWidget {
   }
 
   Widget _buildStatusIndicator(BuildContext context, AppState state, bool isShiftPoint) {
-    return GestureDetector(
+    return ConnectionStatusIndicator(
+      isConnected: state.isConnected,
+      isScanning: state.isScanning,
+      deviceName: state.deviceName,
+      isShiftPoint: isShiftPoint,
       onTap: () => _showBluetoothMock(context, state),
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-        decoration: BoxDecoration(
-          color: isShiftPoint ? Colors.black.withOpacity(0.1) : Colors.white.withOpacity(0.05),
-          borderRadius: BorderRadius.circular(4),
-          border: Border.all(color: isShiftPoint ? Colors.black.withOpacity(0.2) : Colors.white.withOpacity(0.1)),
-        ),
-        child: Row(
-          children: [
-            Container(
-              width: 6,
-              height: 6,
-              decoration: BoxDecoration(
-                color: state.isConnected ? const Color(0xFF00FF00) : const Color(0xFFFF0000),
-                shape: BoxShape.circle,
-              ),
-            ),
-            const SizedBox(width: 6),
-            Text(state.isConnected ? 'LIVE' : 'DISCONNECTED', 
-              style: TextStyle(
-                fontSize: 8, 
-                fontWeight: FontWeight.w900, 
-                color: isShiftPoint ? Colors.black : Colors.white
-              )
-            ),
-          ],
-        ),
-      ),
     );
   }
 
   void _showBluetoothMock(BuildContext context, AppState state) {
+    if (!state.isConnected) {
+      state.startClassicScan();
+    }
+
     showModalBottomSheet(
       context: context,
       backgroundColor: const Color(0xFF0A0A0A),
+      isScrollControlled: true,
       shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
-      builder: (context) => Container(
-        padding: const EdgeInsets.all(24),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text('BLUETOOTH SCANNER', style: GoogleFonts.orbitron(fontSize: 12, fontWeight: FontWeight.bold, letterSpacing: 2)),
-            const SizedBox(height: 24),
-            if (state.isConnected) ...[
-              _buildDeviceTile('ANTASENA-QS-V2', 'CONNECTED', true, () {
-                state.setConnected(false);
-                Navigator.pop(context);
-              }),
-            ] else ...[
-              _buildDeviceTile('ANTASENA-QS-V2', 'SIGNAL: -65dBm', false, () {
-                state.setConnected(true);
-                Navigator.pop(context);
-              }),
-              _buildDeviceTile('RACEBOX-MINI-2', 'SIGNAL: -72dBm', false, () {}),
-              const SizedBox(height: 16),
-              const Center(child: CircularProgressIndicator(strokeWidth: 2, color: Color(0xFFEF4444))),
+      builder: (context) => DraggableScrollableSheet(
+        initialChildSize: 0.6,
+        maxChildSize: 0.9,
+        minChildSize: 0.4,
+        expand: false,
+        builder: (context, scrollController) => Container(
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Text('BLUETOOTH SCANNER', style: GoogleFonts.orbitron(fontSize: 12, fontWeight: FontWeight.bold, letterSpacing: 2)),
+                  if (state.isScanning) 
+                    const SizedBox(width: 12, height: 12, child: CircularProgressIndicator(strokeWidth: 2, color: Color(0xFFEF4444))),
+                ],
+              ),
+              const SizedBox(height: 8),
+              Text('Classic (HC-05) & BLE Support', style: TextStyle(fontSize: 8, color: Colors.white.withOpacity(0.2), letterSpacing: 1)),
+              const SizedBox(height: 24),
+              Expanded(
+                child: ListView(
+                  controller: scrollController,
+                  children: [
+                    if (state.isConnected) ...[
+                      _buildDeviceTile(state.deviceName ?? 'DEVICE', 'CONNECTED', true, () {
+                        state.disconnectClassic();
+                        Navigator.pop(context);
+                      }),
+                    ] else ...[
+                      // Bonded/Paired Devices (HC-05 usually here)
+                      if (state.classicDevices.isNotEmpty) ...[
+                        Text('FOUND DEVICES', style: TextStyle(fontSize: 8, fontWeight: FontWeight.bold, color: Colors.white.withOpacity(0.3))),
+                        const SizedBox(height: 12),
+                        ...state.classicDevices.map((device) => _buildDeviceTile(
+                          device.name ?? 'Unknown Device', 
+                          device.address, 
+                          false, 
+                          () {
+                            state.connectToClassic(device);
+                            Navigator.pop(context);
+                          }
+                        )),
+                      ],
+                      
+                      if (state.isScanning && state.classicDevices.isEmpty) ...[
+                        const SizedBox(height: 40),
+                        const Center(child: CircularProgressIndicator(color: Color(0xFFEF4444))),
+                        const SizedBox(height: 16),
+                        const Center(child: Text('SCANNING...', style: TextStyle(fontSize: 10, color: Colors.white24))),
+                      ],
+                      
+                      if (!state.isScanning && state.classicDevices.isEmpty) ...[
+                        const SizedBox(height: 40),
+                        const Center(child: Icon(Icons.bluetooth_disabled, color: Colors.white10, size: 48)),
+                        const SizedBox(height: 16),
+                        const Center(child: Text('NO DEVICES FOUND', style: TextStyle(fontSize: 10, color: Colors.white24))),
+                      ],
+                    ],
+                  ],
+                ),
+              ),
+              const SizedBox(height: 24),
             ],
-            const SizedBox(height: 24),
-          ],
+          ),
         ),
       ),
     );
@@ -540,6 +650,114 @@ class DashboardPage extends StatelessWidget {
               if (!isShiftPoint) BoxShadow(color: const Color(0xFFEF4444).withOpacity(0.5), blurRadius: 10)
             ],
           ),
+        ),
+      ),
+    );
+  }
+}
+
+class ConnectionStatusIndicator extends StatefulWidget {
+  final bool isConnected;
+  final bool isScanning;
+  final String? deviceName;
+  final bool isShiftPoint;
+  final VoidCallback onTap;
+
+  const ConnectionStatusIndicator({
+    super.key,
+    required this.isConnected,
+    required this.isScanning,
+    this.deviceName,
+    required this.isShiftPoint,
+    required this.onTap,
+  });
+
+  @override
+  State<ConnectionStatusIndicator> createState() => _ConnectionStatusIndicatorState();
+}
+
+class _ConnectionStatusIndicatorState extends State<ConnectionStatusIndicator> with SingleTickerProviderStateMixin {
+  late AnimationController _controller;
+  late Animation<double> _pulseAnimation;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 1500),
+    )..repeat(reverse: true);
+    _pulseAnimation = Tween<double>(begin: 2.0, end: 8.0).animate(
+      CurvedAnimation(parent: _controller, curve: Curves.easeInOut),
+    );
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    Color statusColor = const Color(0xFFFF0000); // Red
+    String statusText = 'DISCONNECTED';
+    
+    if (widget.isConnected) {
+      statusColor = const Color(0xFF00FF00); // Green
+      statusText = widget.deviceName ?? 'CONNECTED';
+    } else if (widget.isScanning) {
+      statusColor = const Color(0xFFFFFF00); // Yellow
+      statusText = 'SCANNING...';
+    }
+
+    return GestureDetector(
+      onTap: widget.onTap,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 300),
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+        decoration: BoxDecoration(
+          color: widget.isShiftPoint ? Colors.black.withOpacity(0.1) : Colors.white.withOpacity(0.05),
+          borderRadius: BorderRadius.circular(4),
+          border: Border.all(color: widget.isShiftPoint ? Colors.black.withOpacity(0.2) : Colors.white.withOpacity(0.1)),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            AnimatedBuilder(
+              animation: _pulseAnimation,
+              builder: (context, child) {
+                bool shouldPulse = widget.isScanning || widget.isConnected;
+                return Container(
+                  width: 6,
+                  height: 6,
+                  decoration: BoxDecoration(
+                    color: statusColor,
+                    shape: BoxShape.circle,
+                    boxShadow: [
+                      BoxShadow(
+                        color: statusColor.withOpacity(0.6),
+                        blurRadius: shouldPulse ? _pulseAnimation.value : 4,
+                        spreadRadius: shouldPulse ? _pulseAnimation.value / 4 : 0,
+                      ),
+                    ],
+                  ),
+                );
+              },
+            ),
+            const SizedBox(width: 8),
+            Flexible(
+              child: Text(statusText.toUpperCase(), 
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  fontSize: 8, 
+                  fontWeight: FontWeight.w900, 
+                  color: widget.isShiftPoint ? Colors.black : Colors.white,
+                  letterSpacing: 0.5,
+                )
+              ),
+            ),
+          ],
         ),
       ),
     );
@@ -627,11 +845,20 @@ class TuningPage extends StatelessWidget {
   }
 
   Widget _buildStealthTuningCard(String label, String value, String unit) {
-    return Container(
+    return AnimatedContainer(
+      duration: const Duration(milliseconds: 200),
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
         color: const Color(0xFF0A0A0A),
-        border: Border.all(color: Colors.white.withOpacity(0.05)),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: Colors.white.withOpacity(0.08)),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.5),
+            blurRadius: 10,
+            offset: const Offset(0, 4),
+          ),
+        ],
       ),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -639,20 +866,27 @@ class TuningPage extends StatelessWidget {
           Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(label, style: TextStyle(color: Colors.white.withOpacity(0.3), fontSize: 8, fontWeight: FontWeight.bold)),
+              Text(label, style: TextStyle(color: Colors.white.withOpacity(0.3), fontSize: 8, fontWeight: FontWeight.bold, letterSpacing: 1)),
               const SizedBox(height: 8),
               Row(
                 crossAxisAlignment: CrossAxisAlignment.baseline,
                 textBaseline: TextBaseline.alphabetic,
                 children: [
-                  Text(value, style: GoogleFonts.jetBrainsMono(fontSize: 28, fontWeight: FontWeight.bold)),
+                  Text(value, style: GoogleFonts.jetBrainsMono(fontSize: 32, fontWeight: FontWeight.bold, color: Colors.white)),
                   const SizedBox(width: 6),
-                  Text(unit, style: TextStyle(color: Colors.white.withOpacity(0.1), fontSize: 10)),
+                  Text(unit, style: TextStyle(color: Colors.white.withOpacity(0.1), fontSize: 10, fontWeight: FontWeight.bold)),
                 ],
               ),
             ],
           ),
-          const Icon(Icons.tune, size: 20, color: Colors.white10),
+          Container(
+            padding: const EdgeInsets.all(8),
+            decoration: BoxDecoration(
+              color: Colors.white.withOpacity(0.03),
+              shape: BoxShape.circle,
+            ),
+            child: const Icon(Icons.tune, size: 20, color: Color(0xFFEF4444)),
+          ),
         ],
       ),
     );
@@ -663,12 +897,13 @@ class TuningPage extends StatelessWidget {
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
         color: const Color(0xFF0A0A0A),
-        border: Border.all(color: Colors.white.withOpacity(0.05)),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: Colors.white.withOpacity(0.08)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text('RPM CALIBRATION', style: TextStyle(color: Colors.white.withOpacity(0.3), fontSize: 8, fontWeight: FontWeight.bold)),
+          Text('RPM CALIBRATION', style: TextStyle(color: Colors.white.withOpacity(0.3), fontSize: 8, fontWeight: FontWeight.bold, letterSpacing: 1)),
           const SizedBox(height: 16),
           Row(
             children: [0.8, 1.0, 1.2, 1.5].map((v) {
@@ -676,14 +911,37 @@ class TuningPage extends StatelessWidget {
               return Expanded(
                 child: GestureDetector(
                   onTap: () => state.setRpmCalibration(v),
-                  child: Container(
-                    margin: const EdgeInsets.symmetric(horizontal: 2),
-                    padding: const EdgeInsets.symmetric(vertical: 14),
+                  child: AnimatedContainer(
+                    duration: const Duration(milliseconds: 250),
+                    curve: Curves.easeOutCubic,
+                    margin: const EdgeInsets.symmetric(horizontal: 4),
+                    padding: const EdgeInsets.symmetric(vertical: 16),
                     decoration: BoxDecoration(
-                      color: selected ? const Color(0xFFEF4444) : Colors.black,
-                      border: Border.all(color: selected ? Colors.transparent : Colors.white.withOpacity(0.05)),
+                      color: selected ? const Color(0xFFEF4444) : Colors.transparent,
+                      borderRadius: BorderRadius.circular(4),
+                      border: Border.all(
+                        color: selected ? const Color(0xFFEF4444) : Colors.white.withOpacity(0.05),
+                        width: 1,
+                      ),
+                      boxShadow: [
+                        if (selected)
+                          BoxShadow(
+                            color: const Color(0xFFEF4444).withOpacity(0.3),
+                            blurRadius: 8,
+                            spreadRadius: 1,
+                          ),
+                      ],
                     ),
-                    child: Text('${v}x', textAlign: TextAlign.center, style: TextStyle(color: selected ? Colors.white : Colors.white.withOpacity(0.2), fontWeight: FontWeight.bold, fontSize: 11)),
+                    child: Text(
+                      '${v}x', 
+                      textAlign: TextAlign.center, 
+                      style: TextStyle(
+                        color: selected ? Colors.white : Colors.white.withOpacity(0.3), 
+                        fontWeight: FontWeight.w900, 
+                        fontSize: 12,
+                        letterSpacing: 0.5,
+                      )
+                    ),
                   ),
                 ),
               );
@@ -697,39 +955,67 @@ class TuningPage extends StatelessWidget {
   Widget _buildStealthKillMatrix(BuildContext context, AppState state) {
     return Container(
       decoration: BoxDecoration(
-        border: Border.all(color: Colors.white.withOpacity(0.05)),
+        color: const Color(0xFF0A0A0A),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: Colors.white.withOpacity(0.08)),
       ),
+      clipBehavior: Clip.antiAlias,
       child: Column(
         children: [
           // Table Header
           Container(
-            padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
-            color: Colors.white.withOpacity(0.02),
+            padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 20),
+            color: Colors.white.withOpacity(0.03),
             child: const Row(
               children: [
-                Expanded(child: Text('STAGE', style: TextStyle(fontSize: 8, fontWeight: FontWeight.bold, color: Colors.white30))),
-                Expanded(flex: 2, child: Text('RPM THRESHOLD', style: TextStyle(fontSize: 8, fontWeight: FontWeight.bold, color: Colors.white30))),
-                Expanded(child: Text('KILL (MS)', style: TextStyle(fontSize: 8, fontWeight: FontWeight.bold, color: Colors.white30))),
+                Expanded(child: Text('STAGE', style: TextStyle(fontSize: 9, fontWeight: FontWeight.w900, color: Colors.white24, letterSpacing: 1))),
+                Expanded(flex: 2, child: Text('RPM THRESHOLD', style: TextStyle(fontSize: 9, fontWeight: FontWeight.w900, color: Colors.white24, letterSpacing: 1))),
+                Expanded(child: Text('KILL (MS)', style: TextStyle(fontSize: 9, fontWeight: FontWeight.w900, color: Colors.white24, letterSpacing: 1))),
               ],
             ),
           ),
           // Table Rows
           ...List.generate(4, (i) {
             return Container(
-              padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 16),
+              padding: const EdgeInsets.symmetric(vertical: 18, horizontal: 20),
               decoration: BoxDecoration(
                 border: Border(top: BorderSide(color: Colors.white.withOpacity(0.05))),
               ),
               child: Row(
                 children: [
-                  Expanded(child: Text('S${i+1}', style: const TextStyle(color: Color(0xFFEF4444), fontWeight: FontWeight.w900, fontSize: 12))),
+                  Expanded(
+                    child: Row(
+                      children: [
+                        Container(
+                          width: 3,
+                          height: 12,
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFEF4444),
+                            borderRadius: BorderRadius.circular(1),
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Text('S${i+1}', style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w900, fontSize: 13)),
+                      ],
+                    )
+                  ),
                   Expanded(
                     flex: 2, 
                     child: GestureDetector(
                       onTap: () => _showEditDialog(context, 'RPM THRESHOLD S${i+1}', state.tableRpm[i].toString(), (val) {
                         state.setTableRpm(i, int.tryParse(val) ?? 0);
                       }),
-                      child: Text(state.tableRpm[i].toString(), style: GoogleFonts.jetBrainsMono(fontWeight: FontWeight.bold, fontSize: 14))
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(vertical: 4),
+                        child: Text(
+                          state.tableRpm[i].toString(), 
+                          style: GoogleFonts.jetBrainsMono(
+                            fontWeight: FontWeight.bold, 
+                            fontSize: 16,
+                            color: Colors.white.withOpacity(0.9),
+                          )
+                        ),
+                      )
                     )
                   ),
                   Expanded(
@@ -737,7 +1023,18 @@ class TuningPage extends StatelessWidget {
                       onTap: () => _showEditDialog(context, 'KILL TIME S${i+1}', state.tableKill[i].toString(), (val) {
                         state.setTableKill(i, int.tryParse(val) ?? 0);
                       }),
-                      child: Text(state.tableKill[i].toString(), style: GoogleFonts.jetBrainsMono(fontWeight: FontWeight.bold, fontSize: 14, color: const Color(0xFF00FF00)))
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(vertical: 4),
+                        alignment: Alignment.centerRight,
+                        child: Text(
+                          state.tableKill[i].toString(), 
+                          style: GoogleFonts.jetBrainsMono(
+                            fontWeight: FontWeight.w900, 
+                            fontSize: 16, 
+                            color: const Color(0xFF00FF00),
+                          )
+                        ),
+                      )
                     )
                   ),
                 ],
@@ -795,6 +1092,10 @@ class RaceboxPage extends StatelessWidget {
         backgroundColor: Colors.black,
         elevation: 0,
         centerTitle: true,
+        actions: [
+          _buildGpsIndicator(state.gpsAccuracy),
+          const SizedBox(width: 16),
+        ],
         bottom: PreferredSize(
           preferredSize: const Size.fromHeight(1),
           child: Container(color: Colors.white.withOpacity(0.05), height: 1),
@@ -894,6 +1195,46 @@ class RaceboxPage extends StatelessWidget {
           Text(value, style: GoogleFonts.jetBrainsMono(fontWeight: FontWeight.bold, fontSize: 20, color: const Color(0xFFEF4444))),
         ],
       ),
+    );
+  }
+
+  Widget _buildGpsIndicator(double accuracy) {
+    Color color;
+    IconData icon;
+    String quality;
+
+    if (accuracy == 0) {
+      color = Colors.white24;
+      icon = Icons.gps_off;
+      quality = 'NO FIX';
+    } else if (accuracy < 5) {
+      color = const Color(0xFF00FF00); // Excellent
+      icon = Icons.gps_fixed;
+      quality = 'EXCELLENT';
+    } else if (accuracy < 15) {
+      color = const Color(0xFFFFFF00); // Good
+      icon = Icons.gps_fixed;
+      quality = 'GOOD';
+    } else {
+      color = const Color(0xFFEF4444); // Poor
+      icon = Icons.gps_not_fixed;
+      quality = 'POOR';
+    }
+
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          crossAxisAlignment: CrossAxisAlignment.end,
+          children: [
+            Text(quality, style: TextStyle(color: color, fontSize: 7, fontWeight: FontWeight.w900, letterSpacing: 0.5)),
+            Text('${accuracy.round()}m', style: TextStyle(color: Colors.white.withOpacity(0.2), fontSize: 8, fontWeight: FontWeight.bold)),
+          ],
+        ),
+        const SizedBox(width: 8),
+        Icon(icon, color: color, size: 16),
+      ],
     );
   }
 }
