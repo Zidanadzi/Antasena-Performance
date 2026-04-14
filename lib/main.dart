@@ -131,8 +131,8 @@ class AppState extends ChangeNotifier {
       await Future.delayed(const Duration(seconds: 2));
       _classicDevices = [
         // Mock devices
-        classic.BluetoothDevice(name: 'HC-05 (MOCK)', address: '00:11:22:33:44:55', bonded: true),
-        classic.BluetoothDevice(name: 'HC-06 (MOCK)', address: 'AA:BB:CC:DD:EE:FF'),
+        const classic.BluetoothDevice(name: 'HC-05 (MOCK)', address: '00:11:22:33:44:55'),
+        const classic.BluetoothDevice(name: 'HC-06 (MOCK)', address: 'AA:BB:CC:DD:EE:FF'),
       ];
       _isScanning = false;
       notifyListeners();
