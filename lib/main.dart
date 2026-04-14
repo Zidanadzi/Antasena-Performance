@@ -6,6 +6,7 @@ import 'dart:async';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:flutter_bluetooth_serial/flutter_bluetooth_serial.dart' as classic;
+import 'package:intl/intl.dart';
 // import 'package:flutter_blue_plus/flutter_blue_plus.dart';
 
 void main() {
@@ -34,7 +35,7 @@ class AppState extends ChangeNotifier {
   // Settings
   double _minRpmActive = 3000;
   double _rpmCalibration = 1.0;
-  List<int> _tableRpm = [4000, 6000, 8000, 10000];
+  List<int> _tableRpm = [3000, 6000, 9000, 12000];
   List<int> _tableKill = [95, 85, 75, 65];
   
   // Connection
@@ -62,6 +63,10 @@ class AppState extends ChangeNotifier {
   // GPS Data
   double _gpsAccuracy = 0;
   
+  // Race History & Real-time Data
+  List<RaceRecord> _history = [];
+  List<DataPoint> _currentRaceData = [];
+  
   // Getters
   int get rpm => _rpm;
   double get speed => _speed;
@@ -80,6 +85,8 @@ class AppState extends ChangeNotifier {
   double? get twoHundredMeter => _twoHundredMeter;
   double? get fourHundredMeter => _fourHundredMeter;
   double get gpsAccuracy => _gpsAccuracy;
+  List<RaceRecord> get history => _history;
+  List<DataPoint> get currentRaceData => _currentRaceData;
 
   AppState() {
     _loadSettings();
@@ -111,6 +118,12 @@ class AppState extends ChangeNotifier {
   }
 
   Future<void> startClassicScan() async {
+    // Check if Bluetooth is enabled
+    bool? isEnabled = await classic.FlutterBluetoothSerial.instance.isEnabled;
+    if (isEnabled == false) {
+      await classic.FlutterBluetoothSerial.instance.requestEnable();
+    }
+
     _isScanning = true;
     _classicDevices = [];
     notifyListeners();
@@ -229,17 +242,26 @@ class AppState extends ChangeNotifier {
     if (_raceStatus == 'RUNNING') return;
     
     _raceTime = 0;
+    _raceDistance = 0;
     _raceStatus = 'RUNNING';
     _zeroToHundred = null;
     _twoHundredMeter = null;
     _fourHundredMeter = null;
+    _currentRaceData = [];
     
-    _raceTimer = Timer.periodic(const Duration(milliseconds: 10), (timer) {
-      _raceTime += 0.01;
+    _raceTimer = Timer.periodic(const Duration(milliseconds: 100), (timer) {
+      _raceTime += 0.1;
       
       // Calculate distance (Speed is in km/h, convert to m/s)
       double metersPerSecond = _speed / 3.6;
-      _raceDistance += metersPerSecond * 0.01;
+      _raceDistance += metersPerSecond * 0.1;
+
+      // Capture data point for graph
+      _currentRaceData.add(DataPoint(
+        time: _raceTime,
+        speed: _speed,
+        rpm: _rpm.toDouble(),
+      ));
       
       // Mock performance tracking
       if (_speed >= 100 && _zeroToHundred == null) {
@@ -252,12 +274,29 @@ class AppState extends ChangeNotifier {
       
       if (_raceDistance >= 402 && _fourHundredMeter == null) {
         _fourHundredMeter = _raceTime;
-        _raceStatus = 'FINISHED';
-        _raceTimer?.cancel();
+        stopRace();
       }
       
       notifyListeners();
     });
+    notifyListeners();
+  }
+
+  void stopRace() {
+    _raceTimer?.cancel();
+    if (_raceStatus == 'RUNNING') {
+      _raceStatus = 'FINISHED';
+      // Save to history
+      _history.insert(0, RaceRecord(
+        date: DateTime.now(),
+        time: _raceTime,
+        topSpeed: _currentRaceData.isEmpty ? 0 : _currentRaceData.map((e) => e.speed).reduce((a, b) => a > b ? a : b),
+        zeroToHundred: _zeroToHundred,
+        twoHundredMeter: _twoHundredMeter,
+        fourHundredMeter: _fourHundredMeter,
+        dataPoints: List.from(_currentRaceData),
+      ));
+    }
     notifyListeners();
   }
 
@@ -269,6 +308,7 @@ class AppState extends ChangeNotifier {
     _zeroToHundred = null;
     _twoHundredMeter = null;
     _fourHundredMeter = null;
+    _currentRaceData = [];
     notifyListeners();
   }
 
@@ -305,6 +345,35 @@ class AppState extends ChangeNotifier {
   }
 }
 
+// --- MODELS ---
+class DataPoint {
+  final double time;
+  final double speed;
+  final double rpm;
+
+  DataPoint({required this.time, required this.speed, required this.rpm});
+}
+
+class RaceRecord {
+  final DateTime date;
+  final double time;
+  final double topSpeed;
+  final double? zeroToHundred;
+  final double? twoHundredMeter;
+  final double? fourHundredMeter;
+  final List<DataPoint> dataPoints;
+
+  RaceRecord({
+    required this.date,
+    required this.time,
+    required this.topSpeed,
+    this.zeroToHundred,
+    this.twoHundredMeter,
+    this.fourHundredMeter,
+    required this.dataPoints,
+  });
+}
+
 // --- MAIN APP ---
 class AntasenaApp extends StatelessWidget {
   const AntasenaApp({super.key});
@@ -339,6 +408,19 @@ class MainNavigation extends StatefulWidget {
 
 class _MainNavigationState extends State<MainNavigation> {
   int _currentIndex = 0;
+  late PageController _pageController;
+
+  @override
+  void initState() {
+    super.initState();
+    _pageController = PageController(initialPage: _currentIndex);
+  }
+
+  @override
+  void dispose() {
+    _pageController.dispose();
+    super.dispose();
+  }
 
   final List<Widget> _pages = [
     const DashboardPage(),
@@ -349,14 +431,26 @@ class _MainNavigationState extends State<MainNavigation> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      body: _pages[_currentIndex],
+      body: PageView(
+        controller: _pageController,
+        onPageChanged: (index) {
+          setState(() => _currentIndex = index);
+        },
+        children: _pages,
+      ),
       bottomNavigationBar: Container(
         decoration: BoxDecoration(
           border: Border(top: BorderSide(color: Colors.white.withOpacity(0.05), width: 1)),
         ),
         child: BottomNavigationBar(
           currentIndex: _currentIndex,
-          onTap: (i) => setState(() => _currentIndex = i),
+          onTap: (i) {
+            _pageController.animateToPage(
+              i, 
+              duration: const Duration(milliseconds: 400), 
+              curve: Curves.easeInOutCubic
+            );
+          },
           backgroundColor: const Color(0xFF0A0A0A),
           selectedItemColor: const Color(0xFFEF4444),
           unselectedItemColor: Colors.white.withOpacity(0.3),
@@ -552,14 +646,43 @@ class DashboardPage extends StatelessWidget {
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  Text('BLUETOOTH SCANNER', style: GoogleFonts.orbitron(fontSize: 12, fontWeight: FontWeight.bold, letterSpacing: 2)),
-                  if (state.isScanning) 
-                    const SizedBox(width: 12, height: 12, child: CircularProgressIndicator(strokeWidth: 2, color: Color(0xFFEF4444))),
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text('BLUETOOTH SCANNER', style: GoogleFonts.orbitron(fontSize: 12, fontWeight: FontWeight.bold, letterSpacing: 2)),
+                      const SizedBox(height: 4),
+                      Text('Classic (HC-05) & BLE Support', style: TextStyle(fontSize: 8, color: Colors.white.withOpacity(0.2), letterSpacing: 1)),
+                    ],
+                  ),
+                  if (!state.isScanning && !state.isConnected)
+                    IconButton(
+                      icon: const Icon(Icons.refresh, size: 20, color: Color(0xFFEF4444)),
+                      onPressed: () => state.startClassicScan(),
+                    ),
                 ],
               ),
-              const SizedBox(height: 8),
-              Text('Classic (HC-05) & BLE Support', style: TextStyle(fontSize: 8, color: Colors.white.withOpacity(0.2), letterSpacing: 1)),
               const SizedBox(height: 24),
+              if (state.isScanning)
+                Container(
+                  margin: const EdgeInsets.only(bottom: 20),
+                  padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFEF4444).withOpacity(0.05),
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: const Color(0xFFEF4444).withOpacity(0.1)),
+                  ),
+                  child: Row(
+                    children: [
+                      const SizedBox(
+                        width: 14,
+                        height: 14,
+                        child: CircularProgressIndicator(strokeWidth: 2, color: Color(0xFFEF4444)),
+                      ),
+                      const SizedBox(width: 16),
+                      Text('SCANNING FOR DEVICES...', style: GoogleFonts.orbitron(fontSize: 9, fontWeight: FontWeight.bold, color: const Color(0xFFEF4444), letterSpacing: 1)),
+                    ],
+                  ),
+                ),
               Expanded(
                 child: ListView(
                   controller: scrollController,
@@ -572,7 +695,7 @@ class DashboardPage extends StatelessWidget {
                     ] else ...[
                       // Bonded/Paired Devices (HC-05 usually here)
                       if (state.classicDevices.isNotEmpty) ...[
-                        Text('FOUND DEVICES', style: TextStyle(fontSize: 8, fontWeight: FontWeight.bold, color: Colors.white.withOpacity(0.3))),
+                        Text('AVAILABLE DEVICES', style: TextStyle(fontSize: 8, fontWeight: FontWeight.bold, color: Colors.white.withOpacity(0.3), letterSpacing: 1)),
                         const SizedBox(height: 12),
                         ...state.classicDevices.map((device) => _buildDeviceTile(
                           device.name ?? 'Unknown Device', 
@@ -583,20 +706,26 @@ class DashboardPage extends StatelessWidget {
                             Navigator.pop(context);
                           }
                         )),
-                      ],
-                      
-                      if (state.isScanning && state.classicDevices.isEmpty) ...[
-                        const SizedBox(height: 40),
-                        const Center(child: CircularProgressIndicator(color: Color(0xFFEF4444))),
-                        const SizedBox(height: 16),
-                        const Center(child: Text('SCANNING...', style: TextStyle(fontSize: 10, color: Colors.white24))),
-                      ],
-                      
-                      if (!state.isScanning && state.classicDevices.isEmpty) ...[
-                        const SizedBox(height: 40),
-                        const Center(child: Icon(Icons.bluetooth_disabled, color: Colors.white10, size: 48)),
-                        const SizedBox(height: 16),
-                        const Center(child: Text('NO DEVICES FOUND', style: TextStyle(fontSize: 10, color: Colors.white24))),
+                      ] else if (!state.isScanning) ...[
+                        const SizedBox(height: 60),
+                        Center(
+                          child: Column(
+                            children: [
+                              Container(
+                                padding: const EdgeInsets.all(20),
+                                decoration: BoxDecoration(
+                                  color: Colors.white.withOpacity(0.02),
+                                  shape: BoxShape.circle,
+                                ),
+                                child: const Icon(Icons.bluetooth_disabled, color: Colors.white10, size: 48),
+                              ),
+                              const SizedBox(height: 20),
+                              const Text('NO DEVICES FOUND', style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Colors.white24, letterSpacing: 2)),
+                              const SizedBox(height: 8),
+                              Text('Make sure your device is in pairing mode', style: TextStyle(fontSize: 8, color: Colors.white.withOpacity(0.1))),
+                            ],
+                          ),
+                        ),
                       ],
                     ],
                   ],
@@ -764,8 +893,16 @@ class _ConnectionStatusIndicatorState extends State<ConnectionStatusIndicator> w
 }
 
 // --- TUNING PAGE ---
-class TuningPage extends StatelessWidget {
+class TuningPage extends StatefulWidget {
   const TuningPage({super.key});
+
+  @override
+  State<TuningPage> createState() => _TuningPageState();
+}
+
+class _TuningPageState extends State<TuningPage> {
+  int? _editingKillIndex;
+  int? _editingRpmIndex;
 
   @override
   Widget build(BuildContext context) {
@@ -1001,9 +1138,12 @@ class TuningPage extends StatelessWidget {
                   Expanded(
                     flex: 2, 
                     child: GestureDetector(
-                      onTap: () => _showEditDialog(context, 'RPM THRESHOLD S${i+1}', state.tableRpm[i].toString(), (val) {
-                        state.setTableRpm(i, int.tryParse(val) ?? 0);
-                      }),
+                      onTap: () {
+                        setState(() => _editingRpmIndex = i);
+                        _showEditDialog(context, 'RPM THRESHOLD S${i+1}', state.tableRpm[i].toString(), (val) {
+                          state.setTableRpm(i, int.tryParse(val) ?? 0);
+                        }, onDismiss: () => setState(() => _editingRpmIndex = null));
+                      },
                       child: Container(
                         padding: const EdgeInsets.symmetric(vertical: 4),
                         child: Text(
@@ -1011,7 +1151,10 @@ class TuningPage extends StatelessWidget {
                           style: GoogleFonts.jetBrainsMono(
                             fontWeight: FontWeight.bold, 
                             fontSize: 16,
-                            color: Colors.white.withOpacity(0.9),
+                            color: _editingRpmIndex == i ? const Color(0xFFFFFFFF) : Colors.white.withOpacity(0.9),
+                            shadows: _editingRpmIndex == i ? [
+                              const Shadow(color: Colors.white, blurRadius: 10),
+                            ] : null,
                           )
                         ),
                       )
@@ -1019,9 +1162,12 @@ class TuningPage extends StatelessWidget {
                   ),
                   Expanded(
                     child: GestureDetector(
-                      onTap: () => _showEditDialog(context, 'KILL TIME S${i+1}', state.tableKill[i].toString(), (val) {
-                        state.setTableKill(i, int.tryParse(val) ?? 0);
-                      }),
+                      onTap: () {
+                        setState(() => _editingKillIndex = i);
+                        _showEditDialog(context, 'KILL TIME S${i+1}', state.tableKill[i].toString(), (val) {
+                          state.setTableKill(i, int.tryParse(val) ?? 0);
+                        }, onDismiss: () => setState(() => _editingKillIndex = null));
+                      },
                       child: Container(
                         padding: const EdgeInsets.symmetric(vertical: 4),
                         alignment: Alignment.centerRight,
@@ -1030,7 +1176,10 @@ class TuningPage extends StatelessWidget {
                           style: GoogleFonts.jetBrainsMono(
                             fontWeight: FontWeight.w900, 
                             fontSize: 16, 
-                            color: const Color(0xFF00FF00),
+                            color: _editingKillIndex == i ? const Color(0xFF66FF66) : const Color(0xFF00FF00),
+                            shadows: _editingKillIndex == i ? [
+                              const Shadow(color: Color(0xFF00FF00), blurRadius: 15),
+                            ] : null,
                           )
                         ),
                       )
@@ -1045,7 +1194,7 @@ class TuningPage extends StatelessWidget {
     );
   }
 
-  void _showEditDialog(BuildContext context, String title, String current, Function(String) onSave) {
+  void _showEditDialog(BuildContext context, String title, String current, Function(String) onSave, {VoidCallback? onDismiss}) {
     final controller = TextEditingController(text: current);
     showDialog(
       context: context,
@@ -1054,6 +1203,7 @@ class TuningPage extends StatelessWidget {
         title: Text(title, style: GoogleFonts.orbitron(fontSize: 12, fontWeight: FontWeight.bold)),
         content: TextField(
           controller: controller,
+          autofocus: true,
           keyboardType: TextInputType.number,
           style: GoogleFonts.jetBrainsMono(),
           decoration: const InputDecoration(
@@ -1072,7 +1222,9 @@ class TuningPage extends StatelessWidget {
           ),
         ],
       ),
-    );
+    ).then((_) {
+      if (onDismiss != null) onDismiss();
+    });
   }
 }
 
@@ -1100,33 +1252,48 @@ class RaceboxPage extends StatelessWidget {
           child: Container(color: Colors.white.withOpacity(0.05), height: 1),
         ),
       ),
-      body: Padding(
+      body: SingleChildScrollView(
         padding: const EdgeInsets.all(24),
         child: Column(
           children: [
             // Main Timer Display
             Container(
               width: double.infinity,
-              padding: const EdgeInsets.symmetric(vertical: 48),
+              padding: const EdgeInsets.symmetric(vertical: 32),
               decoration: BoxDecoration(
                 color: const Color(0xFF0A0A0A),
+                borderRadius: BorderRadius.circular(12),
                 border: Border.all(color: Colors.white.withOpacity(0.05)),
               ),
               child: Column(
                 children: [
                   Text('SESSION TIMER', style: TextStyle(color: Colors.white.withOpacity(0.2), fontSize: 10, fontWeight: FontWeight.bold, letterSpacing: 2)),
-                  const SizedBox(height: 16),
+                  const SizedBox(height: 12),
                   Text(state.raceTime.toStringAsFixed(2), 
-                    style: GoogleFonts.jetBrainsMono(fontSize: 80, fontWeight: FontWeight.w900, letterSpacing: -4)
+                    style: GoogleFonts.jetBrainsMono(fontSize: 72, fontWeight: FontWeight.w900, letterSpacing: -4)
                   ),
-                  const SizedBox(height: 40),
+                  
+                  // Real-time Graph
+                  if (state.currentRaceData.isNotEmpty) ...[
+                    const SizedBox(height: 24),
+                    Container(
+                      height: 100,
+                      width: double.infinity,
+                      padding: const EdgeInsets.symmetric(horizontal: 24),
+                      child: CustomPaint(
+                        painter: RaceGraphPainter(state.currentRaceData),
+                      ),
+                    ),
+                  ],
+
+                  const SizedBox(height: 32),
                   Row(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
                       _buildStealthRaceButton(
                         state.raceStatus == 'RUNNING' ? 'STOP' : 'START', 
                         state.raceStatus == 'RUNNING' ? const Color(0xFFEF4444) : const Color(0xFF00FF00), 
-                        () => state.raceStatus == 'RUNNING' ? state.resetRace() : state.startRace()
+                        () => state.raceStatus == 'RUNNING' ? state.stopRace() : state.startRace()
                       ),
                       const SizedBox(width: 12),
                       _buildStealthRaceButton('RESET', Colors.white.withOpacity(0.05), () => state.resetRace()),
@@ -1136,21 +1303,49 @@ class RaceboxPage extends StatelessWidget {
               ),
             ),
             
-            const SizedBox(height: 32),
+            const SizedBox(height: 24),
             
-            // Metrics Header
-            Row(
-              children: [
-                Container(width: 4, height: 14, color: const Color(0xFFEF4444)),
-                const SizedBox(width: 10),
-                Text('PERFORMANCE METRICS', style: GoogleFonts.orbitron(fontSize: 10, fontWeight: FontWeight.bold, letterSpacing: 1.5, color: Colors.white.withOpacity(0.5))),
-              ],
+            // Performance Metrics Section
+            Container(
+              padding: const EdgeInsets.all(20),
+              decoration: BoxDecoration(
+                color: const Color(0xFF080808),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: Colors.white.withOpacity(0.03)),
+              ),
+              child: Column(
+                children: [
+                  // Metrics Header
+                  Row(
+                    children: [
+                      Container(width: 4, height: 14, color: const Color(0xFFEF4444)),
+                      const SizedBox(width: 10),
+                      Text('CURRENT SESSION', style: GoogleFonts.orbitron(fontSize: 10, fontWeight: FontWeight.bold, letterSpacing: 1.5, color: Colors.white.withOpacity(0.5))),
+                    ],
+                  ),
+                  const SizedBox(height: 20),
+                  
+                  _buildStealthMetricRow('0-100 KM/H', state.zeroToHundred != null ? '${state.zeroToHundred!.toStringAsFixed(2)} s' : '-- s'),
+                  _buildStealthMetricRow('201 METER', state.twoHundredMeter != null ? '${state.twoHundredMeter!.toStringAsFixed(2)} s' : '-- s'),
+                  _buildStealthMetricRow('402 METER', state.fourHundredMeter != null ? '${state.fourHundredMeter!.toStringAsFixed(2)} s' : '-- s'),
+                ],
+              ),
             ),
-            const SizedBox(height: 20),
-            
-            _buildStealthMetricRow('0-100 KM/H', state.zeroToHundred != null ? '${state.zeroToHundred!.toStringAsFixed(2)} s' : '-- s'),
-            _buildStealthMetricRow('201 METER', state.twoHundredMeter != null ? '${state.twoHundredMeter!.toStringAsFixed(2)} s' : '-- s'),
-            _buildStealthMetricRow('402 METER', state.fourHundredMeter != null ? '${state.fourHundredMeter!.toStringAsFixed(2)} s' : '-- s'),
+
+            const SizedBox(height: 32),
+
+            // History Section
+            if (state.history.isNotEmpty) ...[
+              Row(
+                children: [
+                  Container(width: 4, height: 14, color: Colors.blue),
+                  const SizedBox(width: 10),
+                  Text('RACE HISTORY', style: GoogleFonts.orbitron(fontSize: 10, fontWeight: FontWeight.bold, letterSpacing: 1.5, color: Colors.white.withOpacity(0.5))),
+                ],
+              ),
+              const SizedBox(height: 16),
+              ...state.history.map((record) => _buildHistoryCard(context, record)),
+            ],
           ],
         ),
       ),
@@ -1181,11 +1376,12 @@ class RaceboxPage extends StatelessWidget {
 
   Widget _buildStealthMetricRow(String label, String value) {
     return Container(
-      margin: const EdgeInsets.only(bottom: 1),
-      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 20),
+      margin: const EdgeInsets.only(bottom: 8),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
       decoration: BoxDecoration(
-        color: const Color(0xFF0A0A0A),
-        border: Border.all(color: Colors.white.withOpacity(0.05)),
+        color: Colors.white.withOpacity(0.02),
+        borderRadius: BorderRadius.circular(4),
+        border: Border.all(color: Colors.white.withOpacity(0.03)),
       ),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -1236,4 +1432,94 @@ class RaceboxPage extends StatelessWidget {
       ],
     );
   }
+
+  Widget _buildHistoryCard(BuildContext context, RaceRecord record) {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 12),
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: const Color(0xFF0A0A0A),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: Colors.white.withOpacity(0.05)),
+      ),
+      child: Column(
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(DateFormat('MMM dd, HH:mm').format(record.date), style: TextStyle(color: Colors.white.withOpacity(0.3), fontSize: 9, fontWeight: FontWeight.bold)),
+              Text('${record.time.toStringAsFixed(2)}s', style: GoogleFonts.jetBrainsMono(color: const Color(0xFFEF4444), fontWeight: FontWeight.bold, fontSize: 16)),
+            ],
+          ),
+          const SizedBox(height: 12),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              _buildMiniMetric('TOP', '${record.topSpeed.round()}'),
+              _buildMiniMetric('0-100', record.zeroToHundred != null ? record.zeroToHundred!.toStringAsFixed(1) : '--'),
+              _buildMiniMetric('201M', record.twoHundredMeter != null ? record.twoHundredMeter!.toStringAsFixed(1) : '--'),
+              _buildMiniMetric('402M', record.fourHundredMeter != null ? record.fourHundredMeter!.toStringAsFixed(1) : '--'),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildMiniMetric(String label, String value) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(label, style: TextStyle(color: Colors.white.withOpacity(0.1), fontSize: 7, fontWeight: FontWeight.bold)),
+        Text(value, style: GoogleFonts.jetBrainsMono(color: Colors.white.withOpacity(0.6), fontSize: 11, fontWeight: FontWeight.bold)),
+      ],
+    );
+  }
+}
+
+class RaceGraphPainter extends CustomPainter {
+  final List<DataPoint> data;
+  RaceGraphPainter(this.data);
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    if (data.isEmpty) return;
+
+    final paintSpeed = Paint()
+      ..color = const Color(0xFFEF4444)
+      ..strokeWidth = 2
+      ..style = PaintingStyle.stroke;
+
+    final paintRpm = Paint()
+      ..color = Colors.blue.withOpacity(0.5)
+      ..strokeWidth = 1
+      ..style = PaintingStyle.stroke;
+
+    final maxSpeed = data.map((e) => e.speed).reduce((a, b) => a > b ? a : b).clamp(100.0, 300.0);
+    final maxRpm = data.map((e) => e.rpm).reduce((a, b) => a > b ? a : b).clamp(10000.0, 16000.0);
+    final maxTime = data.last.time;
+
+    final pathSpeed = Path();
+    final pathRpm = Path();
+
+    for (int i = 0; i < data.length; i++) {
+      double x = (data[i].time / maxTime) * size.width;
+      double ySpeed = size.height - (data[i].speed / maxSpeed) * size.height;
+      double yRpm = size.height - (data[i].rpm / maxRpm) * size.height;
+
+      if (i == 0) {
+        pathSpeed.moveTo(x, ySpeed);
+        pathRpm.moveTo(x, yRpm);
+      } else {
+        pathSpeed.lineTo(x, ySpeed);
+        pathRpm.lineTo(x, yRpm);
+      }
+    }
+
+    canvas.drawPath(pathRpm, paintRpm);
+    canvas.drawPath(pathSpeed, paintSpeed);
+  }
+
+  @override
+  bool shouldRepaint(covariant CustomPainter oldDelegate) => true;
 }
