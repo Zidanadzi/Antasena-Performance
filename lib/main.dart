@@ -5,7 +5,7 @@ import 'package:provider/provider.dart';
 import 'dart:async';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:geolocator/geolocator.dart';
-import 'package:flutter_blue_plus/flutter_blue_plus.dart';
+// import 'package:flutter_blue_plus/flutter_blue_plus.dart';
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
@@ -206,7 +206,11 @@ class DashboardPage extends StatelessWidget {
               opacity: 0.05,
               child: GridView.builder(
                 gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(crossAxisCount: 10),
-                itemBuilder: (context, index) => Container(border: Border.all(color: Colors.white)),
+                itemBuilder: (context, index) => Container(
+                  decoration: BoxDecoration(
+                    border: Border.all(color: Colors.white.withOpacity(0.1)),
+                  ),
+                ),
               ),
             ),
             
@@ -222,7 +226,7 @@ class DashboardPage extends StatelessWidget {
                       Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Text('ANTASENA', style: GoogleFonts.orbitron(fontSize: 16, fontWeight: FontWeight.black, color: isShiftPoint ? Colors.black : Colors.white, letterSpacing: 1)),
+                          Text('ANTASENA', style: GoogleFonts.orbitron(fontSize: 16, fontWeight: FontWeight.w900, color: isShiftPoint ? Colors.black : Colors.white, letterSpacing: 1)),
                           Text('STEALTH HUD', style: GoogleFonts.orbitron(fontSize: 8, fontWeight: FontWeight.bold, color: isShiftPoint ? Colors.black : const Color(0xFFEF4444), letterSpacing: 2)),
                         ],
                       ),
@@ -330,7 +334,7 @@ class DashboardPage extends StatelessWidget {
           Text(state.isConnected ? 'LIVE' : 'DISCONNECTED', 
             style: TextStyle(
               fontSize: 8, 
-              fontWeight: FontWeight.black, 
+              fontWeight: FontWeight.w900, 
               color: isShiftPoint ? Colors.black : Colors.white
             )
           ),
@@ -427,7 +431,7 @@ class TuningPage extends StatelessWidget {
                 ),
                 child: Center(
                   child: Text('WRITE TO MODULE', 
-                    style: GoogleFonts.orbitron(fontWeight: FontWeight.black, letterSpacing: 2, fontSize: 12)
+                    style: GoogleFonts.orbitron(fontWeight: FontWeight.w900, letterSpacing: 2, fontSize: 12)
                   ),
                 ),
               ),
@@ -506,7 +510,7 @@ class TuningPage extends StatelessWidget {
                       color: selected ? const Color(0xFFEF4444) : Colors.black,
                       border: Border.all(color: selected ? Colors.transparent : Colors.white.withOpacity(0.05)),
                     ),
-                    child: Text('${v}x', textAlign: TextAlign.center, style: TextStyle(color: selected ? Colors.white : Colors.white20, fontWeight: FontWeight.bold, fontSize: 11)),
+                    child: Text('${v}x', textAlign: TextAlign.center, style: TextStyle(color: selected ? Colors.white : Colors.white.withOpacity(0.2), fontWeight: FontWeight.bold, fontSize: 11)),
                   ),
                 ),
               );
@@ -545,7 +549,7 @@ class TuningPage extends StatelessWidget {
               ),
               child: Row(
                 children: [
-                  Expanded(child: Text('S${i+1}', style: const TextStyle(color: Color(0xFFEF4444), fontWeight: FontWeight.black, fontSize: 12))),
+                  Expanded(child: Text('S${i+1}', style: const TextStyle(color: Color(0xFFEF4444), fontWeight: FontWeight.w900, fontSize: 12))),
                   Expanded(flex: 2, child: Text(state.tableRpm[i].toString(), style: GoogleFonts.jetBrainsMono(fontWeight: FontWeight.bold, fontSize: 14))),
                   Expanded(child: Text(state.tableKill[i].toString(), style: GoogleFonts.jetBrainsMono(fontWeight: FontWeight.bold, fontSize: 14, color: const Color(0xFF00FF00)))),
                 ],
@@ -641,7 +645,7 @@ class RaceboxPage extends StatelessWidget {
       ),
       child: Text(label, 
         style: TextStyle(
-          fontWeight: FontWeight.black, 
+          fontWeight: FontWeight.w900, 
           fontSize: 10, 
           letterSpacing: 1,
           color: isAction ? Colors.black : Colors.white
