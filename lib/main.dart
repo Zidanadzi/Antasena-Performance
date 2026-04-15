@@ -65,10 +65,6 @@ class AppState extends ChangeNotifier {
   double? _twoHundredMeter;
   double? _fourHundredMeter;
   
-  // Simulation / Demo Mode
-  bool _isDemoMode = false;
-  Timer? _demoTimer;
-  
   // GPS Data
   double _gpsAccuracy = 0;
   
@@ -91,7 +87,6 @@ class AppState extends ChangeNotifier {
   List<classic.BluetoothDevice> get classicDevices => _classicDevices;
   double get raceTime => _raceTime;
   String get raceStatus => _raceStatus;
-  bool get isDemoMode => _isDemoMode;
   double? get zeroToHundred => _zeroToHundred;
   double? get twoHundredMeter => _twoHundredMeter;
   double? get fourHundredMeter => _fourHundredMeter;
@@ -377,14 +372,6 @@ class AppState extends ChangeNotifier {
       _isConnecting = false;
       _deviceName = device.name ?? device.address;
       
-      // Automatically disable Demo Mode when connected to real hardware
-      if (_isDemoMode) {
-        _demoTimer?.cancel();
-        _isDemoMode = false;
-        _rpm = 0;
-        _speed = 0;
-      }
-      
       _btSubscription = _classicConnection!.input!.listen((Uint8List data) {
         _messageBuffer += String.fromCharCodes(data);
         
@@ -494,24 +481,6 @@ class AppState extends ChangeNotifier {
 
   void setTableKill(int index, int val) {
     _tableKill[index] = val;
-    notifyListeners();
-  }
-
-  void toggleDemoMode() {
-    _isDemoMode = !_isDemoMode;
-    if (_isDemoMode) {
-      _demoTimer = Timer.periodic(const Duration(milliseconds: 100), (timer) {
-        // Simulate RPM sweep
-        _rpm = (_rpm + 500) % 14000;
-        // Simulate Speed
-        if (_rpm > 10000) _speed = (_speed + 2) % 200;
-        notifyListeners();
-      });
-    } else {
-      _demoTimer?.cancel();
-      _rpm = 0;
-      _speed = 0;
-    }
     notifyListeners();
   }
 
@@ -648,9 +617,6 @@ class AppState extends ChangeNotifier {
         _connectionError = 'Failed to write to module: $e';
         message = "Error writing to module: $e";
       }
-    } else if (_isDemoMode) {
-      writeSuccess = true;
-      message = "Demo Mode: Settings simulated successfully";
     } else {
       message = "Saved locally. Connect to module to write settings.";
     }
@@ -880,18 +846,6 @@ class DashboardPage extends StatelessWidget {
                       ),
                       Row(
                         children: [
-                          GestureDetector(
-                            onTap: () => state.toggleDemoMode(),
-                            child: Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                              decoration: BoxDecoration(
-                                color: state.isDemoMode ? accentColor : Colors.white.withOpacity(0.05),
-                                borderRadius: BorderRadius.circular(2),
-                              ),
-                              child: Text('DEMO', style: GoogleFonts.jetBrainsMono(fontSize: 8, fontWeight: FontWeight.w900, color: state.isDemoMode ? Colors.black : Colors.white.withOpacity(0.2))),
-                            ),
-                          ),
-                          const SizedBox(width: 8),
                           _buildStatusIndicator(context, state, isShiftPoint, accentColor),
                         ],
                       ),
