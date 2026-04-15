@@ -1501,20 +1501,23 @@ class _TuningPageState extends State<TuningPage> {
           Text('RPM CALIBRATION', style: TextStyle(color: Colors.white.withOpacity(0.3), fontSize: 8, fontWeight: FontWeight.bold, letterSpacing: 1)),
           const SizedBox(height: 16),
           Wrap(
-            spacing: 8,
-            runSpacing: 8,
-            children: [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0, 1.2, 1.5].map((v) {
+            spacing: 6,
+            runSpacing: 6,
+            children: [
+              0.5, 0.6, 0.7, 0.8, 0.85, 0.9, 0.95, 1.0, 
+              1.05, 1.1, 1.15, 1.2, 1.25, 1.3, 1.4, 1.5
+            ].map((v) {
               bool selected = state.rpmCalibration == v;
               return SizedBox(
-                width: (MediaQuery.of(context).size.width - 80) / 4,
+                width: (MediaQuery.of(context).size.width - 84) / 4,
                 child: GestureDetector(
                   onTap: () => state.setRpmCalibration(v),
                   child: AnimatedContainer(
-                    duration: const Duration(milliseconds: 250),
+                    duration: const Duration(milliseconds: 200),
                     curve: Curves.easeOutCubic,
-                    padding: const EdgeInsets.symmetric(vertical: 12),
+                    padding: const EdgeInsets.symmetric(vertical: 10),
                     decoration: BoxDecoration(
-                      color: selected ? const Color(0xFF00E676) : Colors.transparent,
+                      color: selected ? const Color(0xFF00E676) : Colors.white.withOpacity(0.02),
                       borderRadius: BorderRadius.circular(4),
                       border: Border.all(
                         color: selected ? const Color(0xFF00E676) : Colors.white.withOpacity(0.05),
@@ -1525,9 +1528,9 @@ class _TuningPageState extends State<TuningPage> {
                       '${v}x', 
                       textAlign: TextAlign.center, 
                       style: TextStyle(
-                        color: selected ? Colors.black : Colors.white.withOpacity(0.3), 
-                        fontWeight: FontWeight.w900, 
-                        fontSize: 10,
+                        color: selected ? Colors.black : Colors.white.withOpacity(0.4), 
+                        fontWeight: selected ? FontWeight.w900 : FontWeight.bold, 
+                        fontSize: 9,
                       )
                     ),
                   ),
