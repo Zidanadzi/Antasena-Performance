@@ -73,17 +73,9 @@ class AppState extends ChangeNotifier {
   final List<RaceRecord> _history = [];
   final List<DataPoint> _currentRaceData = [];
   
-  // Performance Tracking
-  int _maxRpm = 0;
-  double _maxSpeed = 0;
-  DateTime? _sessionStartTime;
-  
   // Getters
   int get rpm => _rpm;
   double get speed => _speed;
-  int get maxRpm => _maxRpm;
-  double get maxSpeed => _maxSpeed;
-  DateTime? get sessionStartTime => _sessionStartTime;
   double get minRpmActive => _minRpmActive;
   double get rpmCalibration => _rpmCalibration;
   List<int> get tableRpm => _tableRpm;
@@ -381,9 +373,6 @@ class AppState extends ChangeNotifier {
       _isConnected = true;
       _isConnecting = false;
       _deviceName = device.name ?? device.address;
-      _sessionStartTime = DateTime.now();
-      _maxRpm = 0;
-      _maxSpeed = 0;
       
       _btSubscription = _classicConnection!.input!.listen((Uint8List data) {
         String incoming = String.fromCharCodes(data);
@@ -470,7 +459,6 @@ class AppState extends ChangeNotifier {
 
   void updateRpm(int val) {
     _rpm = (val * _rpmCalibration).round();
-    if (_rpm > _maxRpm) _maxRpm = _rpm;
     notifyListeners();
   }
 
@@ -582,7 +570,6 @@ class AppState extends ChangeNotifier {
         ),
       ).listen((Position position) {
         _speed = position.speed * 3.6; // m/s to km/h
-        if (_speed > _maxSpeed) _maxSpeed = _speed;
         _gpsAccuracy = position.accuracy;
         notifyListeners();
       }).onError((e) {
@@ -937,27 +924,6 @@ class DashboardPage extends StatelessWidget {
       ),
     );
   }
-  }
-
-  Widget _buildCompactStatItem(String label, String value, String unit, bool isShiftPoint, Color accentColor) {
-    return Column(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Text(label, style: GoogleFonts.jetBrainsMono(color: isShiftPoint ? Colors.black.withOpacity(0.5) : Colors.white.withOpacity(0.2), fontSize: 7, fontWeight: FontWeight.bold)),
-        const SizedBox(height: 4),
-        Row(
-          crossAxisAlignment: CrossAxisAlignment.baseline,
-          textBaseline: TextBaseline.alphabetic,
-          children: [
-            Text(value, style: GoogleFonts.exo2(color: isShiftPoint ? Colors.black : Colors.white, fontSize: 16, fontWeight: FontWeight.w900, fontStyle: FontStyle.italic)),
-            const SizedBox(width: 2),
-            Text(unit, style: GoogleFonts.exo2(color: isShiftPoint ? Colors.black : accentColor, fontSize: 8, fontWeight: FontWeight.bold, fontStyle: FontStyle.italic)),
-          ],
-        ),
-      ],
-    );
-  }
-  }
 
   Widget _buildCompactStatItem(String label, String value, String unit, bool isShiftPoint, Color accentColor) {
     return Column(
@@ -1219,46 +1185,7 @@ class DashboardPage extends StatelessWidget {
   }
 }
 
-class _SessionTimer extends StatefulWidget {
-  final DateTime startTime;
-  const _SessionTimer({required this.startTime});
-
-  @override
-  State<_SessionTimer> createState() => _SessionTimerState();
-}
-
-class _SessionTimerState extends State<_SessionTimer> {
-  late Timer _timer;
-  String _timeString = "00:00";
-
-  @override
-  void initState() {
-    super.initState();
-    _timer = Timer.periodic(const Duration(seconds: 1), (timer) {
-      final diff = DateTime.now().difference(widget.startTime);
-      final mins = diff.inMinutes.toString().padLeft(2, '0');
-      final secs = (diff.inSeconds % 60).toString().padLeft(2, '0');
-      if (mounted) setState(() => _timeString = "$mins:$secs");
-    });
-  }
-
-  @override
-  void dispose() {
-    _timer.cancel();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Row(
-      children: [
-        const Icon(Icons.timer_outlined, size: 10, color: Colors.white24),
-        const SizedBox(width: 4),
-        Text(_timeString, style: GoogleFonts.jetBrainsMono(fontSize: 10, color: Colors.white38, fontWeight: FontWeight.bold)),
-      ],
-    );
-  }
-}
+class ConnectionStatusIndicator extends StatefulWidget {
   final bool isConnected;
   final bool isScanning;
   final String? deviceName;
