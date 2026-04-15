@@ -9,7 +9,7 @@ class DesignShowcasePage extends StatefulWidget {
 }
 
 class _DesignShowcasePageState extends State<DesignShowcasePage> {
-  int _selectedStyle = 0; // 0: Stealth Carbon, 1: Minimalist Glass, 2: Retro Arcade, 3: Classic Analog
+  int _selectedStyle = 0; // 0: Stealth Carbon, 1: Minimalist Glass, 2: Retro Arcade, 3: Classic Analog, 4: Stealth Neon, 5: Stealth Red, 6: Stealth Toxic
 
   @override
   Widget build(BuildContext context) {
@@ -24,7 +24,11 @@ class _DesignShowcasePageState extends State<DesignShowcasePage> {
             icon: const Icon(Icons.palette),
             onSelected: (val) => setState(() => _selectedStyle = val),
             itemBuilder: (context) => [
-              const PopupMenuItem(value: 0, child: Text('Stealth Carbon')),
+              const PopupMenuItem(value: 0, child: Text('Stealth Carbon (Gold)')),
+              const PopupMenuItem(value: 4, child: Text('Stealth Neon (Blue)')),
+              const PopupMenuItem(value: 5, child: Text('Stealth Racing (Red)')),
+              const PopupMenuItem(value: 6, child: Text('Stealth Toxic (Green)')),
+              const PopupMenuDivider(),
               const PopupMenuItem(value: 1, child: Text('Minimalist Glass')),
               const PopupMenuItem(value: 2, child: Text('Retro Arcade')),
               const PopupMenuItem(value: 3, child: Text('Classic Analog')),
@@ -52,11 +56,24 @@ class _DesignShowcasePageState extends State<DesignShowcasePage> {
 
   Color _getBgColor() {
     switch (_selectedStyle) {
-      case 0: return const Color(0xFF121212);
+      case 0:
+      case 4:
+      case 5:
+      case 6: return const Color(0xFF121212);
       case 1: return const Color(0xFF0F172A);
       case 2: return Colors.black;
       case 3: return const Color(0xFF1C1C1C);
       default: return Colors.black;
+    }
+  }
+
+  Color _getAccentColor() {
+    switch (_selectedStyle) {
+      case 0: return const Color(0xFFFFD700); // Gold
+      case 4: return const Color(0xFF00E5FF); // Neon Blue
+      case 5: return const Color(0xFFFF1744); // Racing Red
+      case 6: return const Color(0xFF00E676); // Toxic Green
+      default: return Colors.white;
     }
   }
 
@@ -66,17 +83,46 @@ class _DesignShowcasePageState extends State<DesignShowcasePage> {
 
     switch (_selectedStyle) {
       case 0: // Stealth Carbon
-        return Row(
+      case 4: // Stealth Neon
+      case 5: // Stealth Red
+      case 6: // Stealth Toxic
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Container(width: 4, height: 40, color: const Color(0xFFFFD700)),
-            const SizedBox(width: 12),
-            Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                Text(title, style: GoogleFonts.exo2(color: Colors.white, fontSize: 20, fontWeight: FontWeight.w900, fontStyle: FontStyle.italic)),
-                Text("HIGH-PERFORMANCE UNIT", style: GoogleFonts.exo2(color: const Color(0xFFFFD700), fontSize: 8, fontWeight: FontWeight.bold, letterSpacing: 2)),
+                Row(
+                  children: [
+                    Container(width: 2, height: 24, color: _getAccentColor()),
+                    const SizedBox(width: 8),
+                    Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(title, style: GoogleFonts.exo2(color: Colors.white, fontSize: 14, fontWeight: FontWeight.w900, letterSpacing: 1)),
+                        Text("SYSTEM ACTIVE // STABLE", style: GoogleFonts.jetBrainsMono(color: _getAccentColor(), fontSize: 7, fontWeight: FontWeight.bold)),
+                      ],
+                    ),
+                  ],
+                ),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                  decoration: BoxDecoration(
+                    border: Border.all(color: Colors.white.withOpacity(0.1)),
+                    borderRadius: BorderRadius.circular(2),
+                  ),
+                  child: Row(
+                    children: [
+                      Container(width: 4, height: 4, decoration: BoxDecoration(color: _getAccentColor(), shape: BoxShape.circle)),
+                      const SizedBox(width: 4),
+                      Text("LIVE", style: GoogleFonts.jetBrainsMono(color: Colors.white.withOpacity(0.5), fontSize: 8, fontWeight: FontWeight.bold)),
+                    ],
+                  ),
+                ),
               ],
             ),
+            const SizedBox(height: 8),
+            Container(height: 1, width: double.infinity, color: Colors.white.withOpacity(0.05)),
           ],
         );
       case 1: // Minimalist Glass
@@ -110,50 +156,79 @@ class _DesignShowcasePageState extends State<DesignShowcasePage> {
   Widget _buildMainGauge() {
     switch (_selectedStyle) {
       case 0: // Stealth Carbon
+      case 4: // Stealth Neon
+      case 5: // Stealth Red
+      case 6: // Stealth Toxic
         return Column(
           children: [
-            Row(
-              crossAxisAlignment: CrossAxisAlignment.end,
-              children: [
-                Text("124", style: GoogleFonts.exo2(color: Colors.white, fontSize: 110, fontWeight: FontWeight.w900, fontStyle: FontStyle.italic, height: 1)),
-                Padding(
-                  padding: const EdgeInsets.only(bottom: 15, left: 5),
-                  child: Text("KM/H", style: GoogleFonts.exo2(color: const Color(0xFFFFD700), fontSize: 24, fontWeight: FontWeight.bold, fontStyle: FontStyle.italic)),
-                ),
-              ],
-            ),
-            const SizedBox(height: 10),
-            Stack(
-              children: [
-                Container(
-                  height: 12,
-                  width: double.infinity,
-                  decoration: BoxDecoration(
-                    color: Colors.white.withOpacity(0.05),
-                    borderRadius: BorderRadius.circular(2),
-                  ),
-                ),
-                FractionallySizedBox(
-                  widthFactor: 0.7,
-                  child: Container(
-                    height: 12,
-                    decoration: BoxDecoration(
-                      gradient: const LinearGradient(
-                        colors: [Color(0xFFFFD700), Color(0xFFFFA500)],
+            Container(
+              padding: const EdgeInsets.symmetric(vertical: 20, horizontal: 30),
+              decoration: BoxDecoration(
+                color: Colors.white.withOpacity(0.02),
+                border: Border.all(color: Colors.white.withOpacity(0.05)),
+                borderRadius: BorderRadius.circular(4),
+              ),
+              child: Column(
+                children: [
+                  Text("CURRENT VELOCITY", style: GoogleFonts.jetBrainsMono(color: Colors.white.withOpacity(0.3), fontSize: 9, letterSpacing: 2)),
+                  const SizedBox(height: 10),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    crossAxisAlignment: CrossAxisAlignment.end,
+                    children: [
+                      Text("124", style: GoogleFonts.exo2(color: Colors.white, fontSize: 90, fontWeight: FontWeight.w900, fontStyle: FontStyle.italic, height: 1)),
+                      Padding(
+                        padding: const EdgeInsets.only(bottom: 12, left: 4),
+                        child: Text("KM/H", style: GoogleFonts.exo2(color: _getAccentColor(), fontSize: 18, fontWeight: FontWeight.bold, fontStyle: FontStyle.italic)),
                       ),
-                      borderRadius: BorderRadius.circular(2),
-                    ),
+                    ],
                   ),
-                ),
-              ],
+                ],
+              ),
             ),
-            const SizedBox(height: 8),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            const SizedBox(height: 25),
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text("0 RPM", style: GoogleFonts.exo2(color: Colors.white.withOpacity(0.2), fontSize: 10, fontWeight: FontWeight.bold)),
-                Text("8,420 RPM", style: GoogleFonts.exo2(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold)),
-                Text("14,000", style: GoogleFonts.exo2(color: Colors.red.withOpacity(0.5), fontSize: 10, fontWeight: FontWeight.bold)),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text("ENGINE ROTATION", style: GoogleFonts.jetBrainsMono(color: Colors.white.withOpacity(0.3), fontSize: 8, letterSpacing: 1)),
+                    Text("8,420 RPM", style: GoogleFonts.jetBrainsMono(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold)),
+                  ],
+                ),
+                const SizedBox(height: 6),
+                Stack(
+                  children: [
+                    Container(
+                      height: 6,
+                      width: double.infinity,
+                      decoration: BoxDecoration(
+                        color: Colors.white.withOpacity(0.05),
+                        borderRadius: BorderRadius.circular(1),
+                      ),
+                    ),
+                    // Segmented look
+                    Row(
+                      children: List.generate(20, (i) => Expanded(
+                        child: Container(
+                          margin: const EdgeInsets.symmetric(horizontal: 1),
+                          height: 6,
+                          color: i < 14 ? _getAccentColor() : Colors.transparent,
+                        ),
+                      )),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 4),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text("0", style: GoogleFonts.jetBrainsMono(color: Colors.white.withOpacity(0.1), fontSize: 7)),
+                    Text("7K", style: GoogleFonts.jetBrainsMono(color: Colors.white.withOpacity(0.1), fontSize: 7)),
+                    Text("14K", style: GoogleFonts.jetBrainsMono(color: Colors.red.withOpacity(0.3), fontSize: 7)),
+                  ],
+                ),
               ],
             ),
           ],
@@ -231,19 +306,38 @@ class _DesignShowcasePageState extends State<DesignShowcasePage> {
 
     switch (_selectedStyle) {
       case 0: // Stealth Carbon
-        return Column(
+      case 4: // Stealth Neon
+      case 5: // Stealth Red
+      case 6: // Stealth Toxic
+        return GridView.count(
+          shrinkWrap: true,
+          physics: const NeverScrollableScrollPhysics(),
+          crossAxisCount: 2,
+          mainAxisSpacing: 12,
+          crossAxisSpacing: 12,
+          childAspectRatio: 2.2,
           children: data.map((item) => Container(
-            margin: const EdgeInsets.only(bottom: 8),
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+            padding: const EdgeInsets.all(12),
             decoration: BoxDecoration(
-              color: Colors.white.withOpacity(0.02),
-              border: Border(left: BorderSide(color: const Color(0xFFFFD700).withOpacity(0.5), width: 2)),
+              color: Colors.white.withOpacity(0.01),
+              border: Border.all(color: Colors.white.withOpacity(0.05)),
+              borderRadius: BorderRadius.circular(2),
             ),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                Text(item['label']!, style: GoogleFonts.exo2(color: Colors.white.withOpacity(0.4), fontSize: 10, fontWeight: FontWeight.bold, fontStyle: FontStyle.italic)),
-                Text(item['value']!, style: GoogleFonts.exo2(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w900, fontStyle: FontStyle.italic)),
+                Text(item['label']!.toUpperCase(), style: GoogleFonts.jetBrainsMono(color: Colors.white.withOpacity(0.2), fontSize: 7, fontWeight: FontWeight.bold, letterSpacing: 1)),
+                const SizedBox(height: 4),
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.baseline,
+                  textBaseline: TextBaseline.alphabetic,
+                  children: [
+                    Text(item['value']!.replaceAll(RegExp(r'[a-zA-Z/s]'), ''), style: GoogleFonts.exo2(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w900, fontStyle: FontStyle.italic)),
+                    const SizedBox(width: 2),
+                    Text(item['value']!.replaceAll(RegExp(r'[0-9.]'), ''), style: GoogleFonts.exo2(color: _getAccentColor(), fontSize: 8, fontWeight: FontWeight.bold, fontStyle: FontStyle.italic)),
+                  ],
+                ),
               ],
             ),
           )).toList(),
@@ -314,20 +408,37 @@ class _DesignShowcasePageState extends State<DesignShowcasePage> {
   Widget _buildActionButtons() {
     switch (_selectedStyle) {
       case 0: // Stealth Carbon
+      case 4: // Stealth Neon
+      case 5: // Stealth Red
+      case 6: // Stealth Toxic
         return Column(
           children: [
             Container(
               width: double.infinity,
-              height: 50,
+              height: 48,
               decoration: BoxDecoration(
-                border: Border.all(color: const Color(0xFFFFD700)),
+                color: _getAccentColor(),
+                borderRadius: BorderRadius.circular(2),
               ),
-              child: Center(
-                child: Text("ENGAGE PERFORMANCE MODE", 
-                  style: GoogleFonts.exo2(color: const Color(0xFFFFD700), fontWeight: FontWeight.w900, fontStyle: FontStyle.italic, letterSpacing: 1)
-                ),
+              child: Stack(
+                children: [
+                  Positioned(
+                    right: -10,
+                    top: -10,
+                    child: Icon(Icons.bolt, color: Colors.black.withOpacity(0.1), size: 60),
+                  ),
+                  Center(
+                    child: Text(_selectedStyle == 0 ? "ENGAGE PERFORMANCE" :
+                               _selectedStyle == 4 ? "INITIALIZE LINK" :
+                               _selectedStyle == 5 ? "ACTIVATE CORE" : "RELEASE POWER", 
+                      style: GoogleFonts.exo2(color: Colors.black, fontWeight: FontWeight.w900, fontStyle: FontStyle.italic, letterSpacing: 2, fontSize: 12)
+                    ),
+                  ),
+                ],
               ),
             ),
+            const SizedBox(height: 12),
+            Text("WARNING: HIGH VOLTAGE SYSTEM", style: GoogleFonts.jetBrainsMono(color: Colors.red.withOpacity(0.5), fontSize: 7, fontWeight: FontWeight.bold, letterSpacing: 1)),
           ],
         );
       case 1: // Minimalist Glass
