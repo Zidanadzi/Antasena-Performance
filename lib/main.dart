@@ -377,6 +377,14 @@ class AppState extends ChangeNotifier {
       _isConnecting = false;
       _deviceName = device.name ?? device.address;
       
+      // Automatically disable Demo Mode when connected to real hardware
+      if (_isDemoMode) {
+        _demoTimer?.cancel();
+        _isDemoMode = false;
+        _rpm = 0;
+        _speed = 0;
+      }
+      
       _btSubscription = _classicConnection!.input!.listen((Uint8List data) {
         _messageBuffer += String.fromCharCodes(data);
         
