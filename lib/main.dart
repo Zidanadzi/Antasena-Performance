@@ -859,13 +859,13 @@ class DashboardPage extends StatelessWidget {
                     children: [
                       Row(
                         children: [
-                          Container(width: 2, height: 24, color: accentColor),
-                          const SizedBox(width: 8),
+                          Container(width: 3, height: 32, color: accentColor),
+                          const SizedBox(width: 10),
                           Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              Text('ANTASENA', style: GoogleFonts.exo2(fontSize: 14, fontWeight: FontWeight.w900, color: isShiftPoint ? Colors.black : Colors.white, letterSpacing: 1)),
-                              Text('PERFORMANCE', style: GoogleFonts.jetBrainsMono(fontSize: 7, fontWeight: FontWeight.bold, color: isShiftPoint ? Colors.black : accentColor)),
+                              Text('ANTASENA', style: GoogleFonts.exo2(fontSize: 22, fontWeight: FontWeight.w900, color: isShiftPoint ? Colors.black : Colors.white, letterSpacing: 1.5, height: 1.1)),
+                              Text('PERFORMANCE', style: GoogleFonts.jetBrainsMono(fontSize: 10, fontWeight: FontWeight.w900, color: isShiftPoint ? Colors.black : accentColor, letterSpacing: 2)),
                             ],
                           ),
                         ],
@@ -1020,32 +1020,49 @@ class DashboardPage extends StatelessWidget {
     );
   }
 
-  Widget _buildSegmentedRpmBar(int rpm, bool isShiftPoint, Color accentColor, {double height = 6, int segments = 20}) {
+  Widget _buildSegmentedRpmBar(int rpm, bool isShiftPoint, Color accentColor, {double height = 10, int segments = 40}) {
     double progress = (rpm / 14000).clamp(0.0, 1.0);
     int activeSegments = (progress * segments).round();
 
-    return Stack(
-      children: [
-        Container(
-          height: height,
-          width: double.infinity,
-          decoration: BoxDecoration(
-            color: isShiftPoint ? Colors.black.withOpacity(0.1) : Colors.white.withOpacity(0.05),
-            borderRadius: BorderRadius.circular(1),
-          ),
-        ),
-        Row(
-          children: List.generate(segments, (i) => Expanded(
+    return Row(
+      children: List.generate(segments, (i) {
+        double segmentProgress = i / segments;
+        Color segmentColor;
+        
+        if (segmentProgress < 0.6) {
+          segmentColor = const Color(0xFF00E676); // Green
+        } else if (segmentProgress < 0.85) {
+          segmentColor = const Color(0xFFFFD600); // Yellow
+        } else {
+          segmentColor = const Color(0xFFFF1744); // Red
+        }
+
+        bool isActive = i < activeSegments;
+
+        return Expanded(
+          child: Transform(
+            transform: Matrix4.skewX(-0.3), // Sporty slant
             child: Container(
-              margin: const EdgeInsets.symmetric(horizontal: 1),
-              height: height,
-              color: i < activeSegments 
-                ? (isShiftPoint ? Colors.black : accentColor) 
-                : Colors.transparent,
+              margin: const EdgeInsets.symmetric(horizontal: 1.5),
+              height: height + (i * 0.1), // Slightly increasing height for dynamic look
+              decoration: BoxDecoration(
+                color: isActive 
+                  ? (isShiftPoint ? Colors.black : segmentColor) 
+                  : Colors.white.withOpacity(0.05),
+                borderRadius: BorderRadius.circular(1),
+                boxShadow: [
+                  if (isActive && !isShiftPoint)
+                    BoxShadow(
+                      color: segmentColor.withOpacity(0.3),
+                      blurRadius: 4,
+                      spreadRadius: 0,
+                    ),
+                ],
+              ),
             ),
-          )),
-        ),
-      ],
+          ),
+        );
+      }),
     );
   }
 
@@ -1752,7 +1769,7 @@ class RaceboxPage extends StatelessWidget {
                     children: [
                       _buildStealthRaceButton(
                         state.raceStatus == 'RUNNING' ? 'STOP' : 'START', 
-                        state.raceStatus == 'RUNNING' ? const Color(0xFF00E676) : const Color(0xFF00E676).withOpacity(0.2), 
+                        state.raceStatus == 'RUNNING' ? const Color(0xFFEF4444) : const Color(0xFF00E676), 
                         () => state.raceStatus == 'RUNNING' ? state.stopRace() : state.startRace()
                       ),
                       const SizedBox(width: 12),
