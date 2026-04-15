@@ -610,19 +610,22 @@ class AppState extends ChangeNotifier {
     }
   }
 
-  Future<void> saveSettings() async {
+  Future<void> saveSettings(BuildContext context) async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setDouble('minRpmActive', _minRpmActive);
     await prefs.setDouble('rpmCalibration', _rpmCalibration);
     await prefs.setStringList('tableRpm', _tableRpm.map((e) => e.toString()).toList());
     await prefs.setStringList('tableKill', _tableKill.map((e) => e.toString()).toList());
     
+    bool writeSuccess = false;
+    String message = "Settings saved locally";
+
     // Write to Bluetooth Module if connected
     if (_isConnected && _classicConnection != null) {
       try {
-        // Simple protocol: S[MIN_RPM],[CALIB],[RPM1],[KILL1],...[RPM10],[KILL10]\n
+        // Simple protocol: S[MIN_RPM],[CALIB],[RPM1],[KILL1],...[RPM4],[KILL4]\n
         String config = "S${_minRpmActive.round()},${_rpmCalibration.toStringAsFixed(1)}";
-        for (int i = 0; i < 10; i++) {
+        for (int i = 0; i < _tableRpm.length; i++) {
           config += ",${_tableRpm[i]},${_tableKill[i]}";
         }
         config += "\n";
@@ -630,10 +633,29 @@ class AppState extends ChangeNotifier {
         _classicConnection!.output.add(Uint8List.fromList(config.codeUnits));
         await _classicConnection!.output.allSent;
         debugPrint('Config sent to module: $config');
+        writeSuccess = true;
+        message = "Settings written to module successfully";
       } catch (e) {
         debugPrint('Error writing to module: $e');
         _connectionError = 'Failed to write to module: $e';
+        message = "Error writing to module: $e";
       }
+    } else if (_isDemoMode) {
+      writeSuccess = true;
+      message = "Demo Mode: Settings simulated successfully";
+    } else {
+      message = "Saved locally. Connect to module to write settings.";
+    }
+    
+    if (context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(message, style: GoogleFonts.jetBrainsMono(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.black)),
+          backgroundColor: writeSuccess ? const Color(0xFF00E676) : Colors.orange,
+          behavior: SnackBarBehavior.floating,
+          duration: const Duration(seconds: 2),
+        ),
+      );
     }
     
     notifyListeners();
@@ -1398,18 +1420,18 @@ class _TuningPageState extends State<TuningPage> {
             
             // Write Button
             GestureDetector(
-              onTap: () => state.saveSettings(),
+              onTap: () => state.saveSettings(context),
               child: Container(
                 width: double.infinity,
                 padding: const EdgeInsets.symmetric(vertical: 20),
                 decoration: BoxDecoration(
-                  color: const Color(0xFFEF4444),
+                  color: const Color(0xFF00E676),
                   borderRadius: BorderRadius.circular(4),
-                  boxShadow: [BoxShadow(color: const Color(0xFFEF4444).withOpacity(0.3), blurRadius: 20)],
+                  boxShadow: [BoxShadow(color: const Color(0xFF00E676).withOpacity(0.3), blurRadius: 20)],
                 ),
                 child: Center(
                   child: Text('WRITE TO MODULE', 
-                    style: GoogleFonts.orbitron(fontWeight: FontWeight.w900, letterSpacing: 2, fontSize: 12)
+                    style: GoogleFonts.orbitron(fontWeight: FontWeight.w900, letterSpacing: 2, fontSize: 12, color: Colors.black)
                   ),
                 ),
               ),
@@ -1424,7 +1446,7 @@ class _TuningPageState extends State<TuningPage> {
   Widget _buildSectionHeader(String title) {
     return Row(
       children: [
-        Container(width: 4, height: 14, color: const Color(0xFFEF4444)),
+        Container(width: 4, height: 14, color: const Color(0xFF00E676)),
         const SizedBox(width: 10),
         Text(title, style: GoogleFonts.orbitron(fontSize: 10, fontWeight: FontWeight.bold, letterSpacing: 1.5, color: Colors.white.withOpacity(0.5))),
       ],
@@ -1472,7 +1494,7 @@ class _TuningPageState extends State<TuningPage> {
               color: Colors.white.withOpacity(0.03),
               shape: BoxShape.circle,
             ),
-            child: const Icon(Icons.tune, size: 20, color: Color(0xFFEF4444)),
+            child: const Icon(Icons.tune, size: 20, color: Color(0xFF00E676)),
           ),
         ],
       ),
@@ -1504,16 +1526,16 @@ class _TuningPageState extends State<TuningPage> {
                     margin: const EdgeInsets.symmetric(horizontal: 4),
                     padding: const EdgeInsets.symmetric(vertical: 16),
                     decoration: BoxDecoration(
-                      color: selected ? const Color(0xFFEF4444) : Colors.transparent,
+                      color: selected ? const Color(0xFF00E676) : Colors.transparent,
                       borderRadius: BorderRadius.circular(4),
                       border: Border.all(
-                        color: selected ? const Color(0xFFEF4444) : Colors.white.withOpacity(0.05),
+                        color: selected ? const Color(0xFF00E676) : Colors.white.withOpacity(0.05),
                         width: 1,
                       ),
                       boxShadow: [
                         if (selected)
                           BoxShadow(
-                            color: const Color(0xFFEF4444).withOpacity(0.3),
+                            color: const Color(0xFF00E676).withOpacity(0.3),
                             blurRadius: 8,
                             spreadRadius: 1,
                           ),
@@ -1523,7 +1545,7 @@ class _TuningPageState extends State<TuningPage> {
                       '${v}x', 
                       textAlign: TextAlign.center, 
                       style: TextStyle(
-                        color: selected ? Colors.white : Colors.white.withOpacity(0.3), 
+                        color: selected ? Colors.black : Colors.white.withOpacity(0.3), 
                         fontWeight: FontWeight.w900, 
                         fontSize: 12,
                         letterSpacing: 0.5,
@@ -1577,7 +1599,7 @@ class _TuningPageState extends State<TuningPage> {
                           width: 3,
                           height: 12,
                           decoration: BoxDecoration(
-                            color: const Color(0xFFEF4444),
+                            color: const Color(0xFF00E676),
                             borderRadius: BorderRadius.circular(1),
                           ),
                         ),
@@ -1659,7 +1681,7 @@ class _TuningPageState extends State<TuningPage> {
           style: GoogleFonts.jetBrainsMono(),
           decoration: const InputDecoration(
             enabledBorder: UnderlineInputBorder(borderSide: BorderSide(color: Colors.white10)),
-            focusedBorder: UnderlineInputBorder(borderSide: BorderSide(color: Color(0xFFEF4444))),
+            focusedBorder: UnderlineInputBorder(borderSide: BorderSide(color: Color(0xFF00E676))),
           ),
         ),
         actions: [
@@ -1669,7 +1691,7 @@ class _TuningPageState extends State<TuningPage> {
               onSave(controller.text);
               Navigator.pop(context);
             }, 
-            child: const Text('SAVE', style: TextStyle(color: Color(0xFFEF4444)))
+            child: const Text('SAVE', style: TextStyle(color: Color(0xFF00E676)))
           ),
         ],
       ),
@@ -1730,7 +1752,7 @@ class RaceboxPage extends StatelessWidget {
                     children: [
                       _buildStealthRaceButton(
                         state.raceStatus == 'RUNNING' ? 'STOP' : 'START', 
-                        state.raceStatus == 'RUNNING' ? const Color(0xFFEF4444) : const Color(0xFF00FF00), 
+                        state.raceStatus == 'RUNNING' ? const Color(0xFF00E676) : const Color(0xFF00E676).withOpacity(0.2), 
                         () => state.raceStatus == 'RUNNING' ? state.stopRace() : state.startRace()
                       ),
                       const SizedBox(width: 12),
@@ -1756,7 +1778,7 @@ class RaceboxPage extends StatelessWidget {
                   // Metrics Header
                   Row(
                     children: [
-                      Container(width: 4, height: 14, color: const Color(0xFFEF4444)),
+                      Container(width: 4, height: 14, color: const Color(0xFF00E676)),
                       const SizedBox(width: 10),
                       Text('CURRENT SESSION', style: GoogleFonts.orbitron(fontSize: 10, fontWeight: FontWeight.bold, letterSpacing: 1.5, color: Colors.white.withOpacity(0.5))),
                     ],
@@ -1825,7 +1847,7 @@ class RaceboxPage extends StatelessWidget {
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
           Text(label, style: TextStyle(color: Colors.white.withOpacity(0.3), fontWeight: FontWeight.bold, fontSize: 10)),
-          Text(value, style: GoogleFonts.jetBrainsMono(fontWeight: FontWeight.bold, fontSize: 20, color: const Color(0xFFEF4444))),
+          Text(value, style: GoogleFonts.jetBrainsMono(fontWeight: FontWeight.bold, fontSize: 20, color: const Color(0xFF00E676))),
         ],
       ),
     );
@@ -1849,7 +1871,7 @@ class RaceboxPage extends StatelessWidget {
       icon = Icons.gps_fixed;
       quality = 'GOOD';
     } else {
-      color = const Color(0xFFEF4444); // Poor
+      color = const Color(0xFF00E676).withOpacity(0.5); // Poor
       icon = Icons.gps_not_fixed;
       quality = 'POOR';
     }
@@ -1892,11 +1914,11 @@ class RaceboxPage extends StatelessWidget {
                   const SizedBox(width: 12),
                   GestureDetector(
                     onTap: () => state.deleteHistoryRecord(record),
-                    child: Icon(Icons.delete_outline, size: 14, color: Colors.white.withOpacity(0.2)),
+                    child: Icon(Icons.delete_outline, size: 14, color: const Color(0xFF00E676).withOpacity(0.5)),
                   ),
                 ],
               ),
-              Text('${record.time.toStringAsFixed(2)}s', style: GoogleFonts.jetBrainsMono(color: const Color(0xFFEF4444), fontWeight: FontWeight.bold, fontSize: 16)),
+              Text('${record.time.toStringAsFixed(2)}s', style: GoogleFonts.jetBrainsMono(color: const Color(0xFF00E676), fontWeight: FontWeight.bold, fontSize: 16)),
             ],
           ),
           const SizedBox(height: 12),
@@ -1934,12 +1956,12 @@ class RaceGraphPainter extends CustomPainter {
     if (data.isEmpty) return;
 
     final paintSpeed = Paint()
-      ..color = const Color(0xFFEF4444)
+      ..color = const Color(0xFF00E676)
       ..strokeWidth = 2
       ..style = PaintingStyle.stroke;
 
     final paintRpm = Paint()
-      ..color = Colors.blue.withOpacity(0.5)
+      ..color = const Color(0xFF00E676).withOpacity(0.3)
       ..strokeWidth = 1
       ..style = PaintingStyle.stroke;
 
