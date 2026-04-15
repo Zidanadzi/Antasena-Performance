@@ -67,9 +67,9 @@ class _DesignShowcasePageState extends State<DesignShowcasePage> {
         return Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(title, style: GoogleFonts.jetbrainsMono(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold, letterSpacing: 1)),
+            Text(title, style: GoogleFonts.jetBrainsMono(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold, letterSpacing: 1)),
             const SizedBox(height: 4),
-            Text(subtitle, style: GoogleFonts.jetbrainsMono(color: Colors.white.withOpacity(0.4), fontSize: 10, letterSpacing: 1)),
+            Text(subtitle, style: GoogleFonts.jetBrainsMono(color: Colors.white.withOpacity(0.4), fontSize: 10, letterSpacing: 1)),
             const SizedBox(height: 12),
             Container(height: 1, color: Colors.white.withOpacity(0.1)),
           ],
@@ -126,11 +126,11 @@ class _DesignShowcasePageState extends State<DesignShowcasePage> {
                 Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    Text("RPM", style: GoogleFonts.jetbrainsMono(color: Colors.white.withOpacity(0.4), fontSize: 12)),
-                    Text("8420", style: GoogleFonts.jetbrainsMono(color: const Color(0xFF00FF00), fontSize: 48, fontWeight: FontWeight.bold, shadows: [
+                    Text("RPM", style: GoogleFonts.jetBrainsMono(color: Colors.white.withOpacity(0.4), fontSize: 12)),
+                    Text("8420", style: GoogleFonts.jetBrainsMono(color: const Color(0xFF00FF00), fontSize: 48, fontWeight: FontWeight.bold, shadows: [
                       Shadow(color: const Color(0xFF00FF00).withOpacity(0.5), blurRadius: 10)
                     ])),
-                    Text("PEAK: 11200", style: GoogleFonts.jetbrainsMono(color: Colors.red.withOpacity(0.6), fontSize: 10)),
+                    Text("PEAK: 11200", style: GoogleFonts.jetBrainsMono(color: Colors.red.withOpacity(0.6), fontSize: 10)),
                   ],
                 )
               ],
@@ -219,8 +219,8 @@ class _DesignShowcasePageState extends State<DesignShowcasePage> {
               crossAxisAlignment: CrossAxisAlignment.start,
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                Text(item['label']!, style: GoogleFonts.jetbrainsMono(color: Colors.white.withOpacity(0.4), fontSize: 10)),
-                Text(item['value']!, style: GoogleFonts.jetbrainsMono(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold)),
+                Text(item['label']!, style: GoogleFonts.jetBrainsMono(color: Colors.white.withOpacity(0.4), fontSize: 10)),
+                Text(item['value']!, style: GoogleFonts.jetBrainsMono(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold)),
               ],
             ),
           )).toList(),
@@ -236,7 +236,7 @@ class _DesignShowcasePageState extends State<DesignShowcasePage> {
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
                 Text(item['label']!, style: GoogleFonts.libreBaskerville(fontStyle: FontStyle.italic, fontSize: 12, color: Colors.black.withOpacity(0.5))),
-                Text(item['value']!, style: GoogleFonts.jetbrainsMono(fontSize: 14, fontWeight: FontWeight.bold)),
+                Text(item['value']!, style: GoogleFonts.jetBrainsMono(fontSize: 14, fontWeight: FontWeight.bold)),
               ],
             ),
           )).toList(),
@@ -276,7 +276,7 @@ class _DesignShowcasePageState extends State<DesignShowcasePage> {
                   borderRadius: BorderRadius.circular(4),
                   border: Border.all(color: Colors.red.withOpacity(0.5)),
                 ),
-                child: Center(child: Text("STOP ENGINE", style: GoogleFonts.jetbrainsMono(color: Colors.red, fontWeight: FontWeight.bold))),
+                child: Center(child: Text("STOP ENGINE", style: GoogleFonts.jetBrainsMono(color: Colors.red, fontWeight: FontWeight.bold))),
               ),
             ),
             const SizedBox(width: 10),
