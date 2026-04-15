@@ -384,17 +384,11 @@ class AppState extends ChangeNotifier {
           String msg = _messageBuffer.substring(0, index).trim();
           _messageBuffer = _messageBuffer.substring(index + 1);
           
-          // More robust Regex parsing
+          // More robust Regex parsing for RPM only
           final rpmMatch = RegExp(r'RPM\s*:\s*(\d+)').firstMatch(msg);
           if (rpmMatch != null) {
             int? val = int.tryParse(rpmMatch.group(1)!);
             if (val != null) updateRpm(val);
-          }
-          
-          final speedMatch = RegExp(r'SPEED\s*:\s*([\d.]+)').firstMatch(msg);
-          if (speedMatch != null) {
-            double? val = double.tryParse(speedMatch.group(1)!);
-            if (val != null) _speed = val;
           }
           
           notifyListeners();
