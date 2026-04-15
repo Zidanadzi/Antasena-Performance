@@ -73,9 +73,17 @@ class AppState extends ChangeNotifier {
   final List<RaceRecord> _history = [];
   final List<DataPoint> _currentRaceData = [];
   
+  // Performance Tracking
+  int _maxRpm = 0;
+  double _maxSpeed = 0;
+  DateTime? _sessionStartTime;
+  
   // Getters
   int get rpm => _rpm;
   double get speed => _speed;
+  int get maxRpm => _maxRpm;
+  double get maxSpeed => _maxSpeed;
+  DateTime? get sessionStartTime => _sessionStartTime;
   double get minRpmActive => _minRpmActive;
   double get rpmCalibration => _rpmCalibration;
   List<int> get tableRpm => _tableRpm;
@@ -373,6 +381,9 @@ class AppState extends ChangeNotifier {
       _isConnected = true;
       _isConnecting = false;
       _deviceName = device.name ?? device.address;
+      _sessionStartTime = DateTime.now();
+      _maxRpm = 0;
+      _maxSpeed = 0;
       
       _btSubscription = _classicConnection!.input!.listen((Uint8List data) {
         String incoming = String.fromCharCodes(data);
@@ -459,6 +470,7 @@ class AppState extends ChangeNotifier {
 
   void updateRpm(int val) {
     _rpm = (val * _rpmCalibration).round();
+    if (_rpm > _maxRpm) _maxRpm = _rpm;
     notifyListeners();
   }
 
@@ -570,6 +582,7 @@ class AppState extends ChangeNotifier {
         ),
       ).listen((Position position) {
         _speed = position.speed * 3.6; // m/s to km/h
+        if (_speed > _maxSpeed) _maxSpeed = _speed;
         _gpsAccuracy = position.accuracy;
         notifyListeners();
       }).onError((e) {
@@ -797,189 +810,153 @@ class DashboardPage extends StatelessWidget {
     bool isShiftPoint = state.rpm > 12000;
 
     return Scaffold(
-      backgroundColor: isShiftPoint ? accentColor : const Color(0xFF121212),
+      backgroundColor: isShiftPoint ? accentColor : const Color(0xFF0F0F0F),
       body: SafeArea(
-        child: Stack(
-          children: [
-            // Background Pattern (Subtle Grid)
-            Opacity(
-              opacity: 0.03,
-              child: GridView.builder(
-                gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(crossAxisCount: 10),
-                itemBuilder: (context, index) => Container(
-                  decoration: BoxDecoration(
-                    border: Border.all(color: Colors.white.withOpacity(0.1)),
-                  ),
-                ),
-              ),
-            ),
-            
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 24.0, vertical: 16.0),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 24.0, vertical: 16.0),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // HEADER & STATUS
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  // Top Info Bar
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Row(
-                        children: [
-                          Container(width: 3, height: 32, color: accentColor),
-                          const SizedBox(width: 10),
-                          Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text('ANTASENA', style: GoogleFonts.exo2(fontSize: 22, fontWeight: FontWeight.w900, color: isShiftPoint ? Colors.black : Colors.white, letterSpacing: 1.5, height: 1.1)),
-                              Text('PERFORMANCE', style: GoogleFonts.jetBrainsMono(fontSize: 10, fontWeight: FontWeight.w900, color: isShiftPoint ? Colors.black : accentColor, letterSpacing: 2)),
-                            ],
-                          ),
-                        ],
-                      ),
-                      Row(
-                        children: [
-                          _buildStatusIndicator(context, state, isShiftPoint, accentColor),
-                        ],
-                      ),
+                      Text('ANTASENA', style: GoogleFonts.exo2(fontSize: 22, fontWeight: FontWeight.w900, color: isShiftPoint ? Colors.black : Colors.white, letterSpacing: 1.5, height: 1.1)),
+                      Text('PERFORMANCE', style: GoogleFonts.jetBrainsMono(fontSize: 10, fontWeight: FontWeight.w900, color: isShiftPoint ? Colors.black : accentColor, letterSpacing: 2)),
                     ],
                   ),
-                  
-                  const SizedBox(height: 16),
-
-                  // System Status Indicator
-                  Container(
-                    margin: const EdgeInsets.only(bottom: 8),
-                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                    decoration: BoxDecoration(
-                      color: (state.isConnected ? accentColor : Colors.red).withOpacity(0.1),
-                      borderRadius: BorderRadius.circular(4),
-                    ),
-                    child: Text(
-                      state.isConnected ? "SYSTEM ON" : "SYSTEM OFF",
-                      style: GoogleFonts.jetBrainsMono(
-                        fontSize: 8, 
-                        color: (state.isConnected ? accentColor : Colors.red).withOpacity(0.5),
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                  ),
-
-                  const SizedBox(height: 12),
-
-                  // GIANT SPEEDOMETER (TOP FOCUS)
-                  Center(
-                    child: Container(
-                      width: double.infinity,
-                      padding: const EdgeInsets.symmetric(vertical: 16),
-                      decoration: BoxDecoration(
-                        color: Colors.white.withOpacity(0.02),
-                        borderRadius: BorderRadius.circular(8),
-                        border: Border.all(color: Colors.white.withOpacity(0.05)),
-                      ),
-                      child: Column(
-                        children: [
-                          Text("VELOCITY", style: GoogleFonts.jetBrainsMono(color: isShiftPoint ? Colors.black.withOpacity(0.5) : Colors.white.withOpacity(0.2), fontSize: 10, letterSpacing: 4, fontWeight: FontWeight.bold)),
-                          const SizedBox(height: 4),
-                          Row(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            crossAxisAlignment: CrossAxisAlignment.end,
-                            children: [
-                              Text(state.speed.round().toString(), 
-                                style: GoogleFonts.exo2(
-                                  fontSize: 110, 
-                                  fontWeight: FontWeight.w900, 
-                                  fontStyle: FontStyle.italic,
-                                  height: 0.85,
-                                  color: isShiftPoint ? Colors.black : Colors.white,
-                                  shadows: [
-                                    if (!isShiftPoint)
-                                      Shadow(color: accentColor.withOpacity(0.4), blurRadius: 25),
-                                  ],
-                                )
-                              ),
-                              Padding(
-                                padding: const EdgeInsets.only(bottom: 10, left: 6),
-                                child: Text("KM/H", style: GoogleFonts.exo2(color: isShiftPoint ? Colors.black : accentColor, fontSize: 20, fontWeight: FontWeight.bold, fontStyle: FontStyle.italic)),
-                              ),
-                            ],
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                  
-                  const Spacer(),
-
-                  // PRIMARY RPM INDICATOR (CENTRAL FOCUS)
-                  Container(
-                    padding: const EdgeInsets.all(16),
-                    decoration: BoxDecoration(
-                      color: Colors.white.withOpacity(0.01),
-                      borderRadius: BorderRadius.circular(8),
-                      border: Border.all(color: Colors.white.withOpacity(0.03)),
-                    ),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                          children: [
-                            Text("ENGINE ROTATION", style: GoogleFonts.jetBrainsMono(color: isShiftPoint ? Colors.black.withOpacity(0.5) : Colors.white.withOpacity(0.3), fontSize: 9, letterSpacing: 1, fontWeight: FontWeight.bold)),
-                            Row(
-                              crossAxisAlignment: CrossAxisAlignment.baseline,
-                              textBaseline: TextBaseline.alphabetic,
-                              children: [
-                                Text("${state.rpm}", style: GoogleFonts.exo2(color: isShiftPoint ? Colors.black : Colors.white, fontSize: 24, fontWeight: FontWeight.w900, fontStyle: FontStyle.italic)),
-                                const SizedBox(width: 4),
-                                Text("RPM", style: GoogleFonts.exo2(color: isShiftPoint ? Colors.black : accentColor, fontSize: 12, fontWeight: FontWeight.bold)),
-                              ],
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 10),
-                        _buildSegmentedRpmBar(state.rpm, isShiftPoint, accentColor, height: 14, segments: 35),
-                        const SizedBox(height: 6),
-                        Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                          children: [
-                            Text("0", style: GoogleFonts.jetBrainsMono(color: isShiftPoint ? Colors.black.withOpacity(0.2) : Colors.white.withOpacity(0.1), fontSize: 8)),
-                            Text("7K", style: GoogleFonts.jetBrainsMono(color: isShiftPoint ? Colors.black.withOpacity(0.2) : Colors.white.withOpacity(0.1), fontSize: 8)),
-                            Text("14K", style: GoogleFonts.jetBrainsMono(color: isShiftPoint ? Colors.black.withOpacity(0.2) : Colors.red.withOpacity(0.4), fontSize: 8, fontWeight: FontWeight.bold)),
-                          ],
-                        ),
-                      ],
-                    ),
-                  ),
-                  
-                  const Spacer(),
-                  
-                  // SECONDARY STATS (TIDIED UP AT BOTTOM)
-                  Container(
-                    padding: const EdgeInsets.all(12),
-                    decoration: BoxDecoration(
-                      color: Colors.white.withOpacity(0.01),
-                      borderRadius: BorderRadius.circular(4),
-                      border: Border.all(color: Colors.white.withOpacity(0.03)),
-                    ),
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceAround,
-                      children: [
-                        _buildCompactStatItem('MIN ACTIVE', state.minRpmActive.round().toString(), 'RPM', isShiftPoint, accentColor),
-                        Container(width: 1, height: 24, color: Colors.white.withOpacity(0.05)),
-                        _buildCompactStatItem('CALIBRATION', state.rpmCalibration.toStringAsFixed(1), 'X', isShiftPoint, accentColor),
-                        Container(width: 1, height: 24, color: Colors.white.withOpacity(0.05)),
-                        _buildCompactStatItem('GPS ACC', state.gpsAccuracy.toStringAsFixed(1), 'M', isShiftPoint, accentColor),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(height: 8),
+                  _buildStatusIndicator(context, state, isShiftPoint, accentColor),
                 ],
               ),
-            ),
-          ],
+              
+              const SizedBox(height: 16),
+
+              // SYSTEM STATUS
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                decoration: BoxDecoration(
+                  color: (state.isConnected ? accentColor : Colors.red).withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(4),
+                ),
+                child: Text(
+                  state.isConnected ? "SYSTEM ON" : "SYSTEM OFF",
+                  style: GoogleFonts.jetBrainsMono(fontSize: 8, color: (state.isConnected ? accentColor : Colors.red).withOpacity(0.5), fontWeight: FontWeight.bold),
+                ),
+              ),
+
+              const Spacer(flex: 1),
+
+              // GIANT SPEEDOMETER
+              Center(
+                child: Column(
+                  children: [
+                    Text("VELOCITY", style: GoogleFonts.jetBrainsMono(color: isShiftPoint ? Colors.black.withOpacity(0.5) : Colors.white.withOpacity(0.2), fontSize: 10, letterSpacing: 4, fontWeight: FontWeight.bold)),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      crossAxisAlignment: CrossAxisAlignment.end,
+                      children: [
+                        Text(state.speed.round().toString(), 
+                          style: GoogleFonts.exo2(
+                            fontSize: 120, 
+                            fontWeight: FontWeight.w900, 
+                            fontStyle: FontStyle.italic,
+                            height: 0.9,
+                            color: isShiftPoint ? Colors.black : Colors.white,
+                            shadows: [if (!isShiftPoint) Shadow(color: accentColor.withOpacity(0.3), blurRadius: 25)],
+                          )
+                        ),
+                        Padding(
+                          padding: const EdgeInsets.only(bottom: 14, left: 6),
+                          child: Text("KM/H", style: GoogleFonts.exo2(color: isShiftPoint ? Colors.black : accentColor, fontSize: 22, fontWeight: FontWeight.bold, fontStyle: FontStyle.italic)),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+
+              const Spacer(flex: 1),
+
+              // RPM BAR
+              Container(
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: Colors.white.withOpacity(0.02),
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: Colors.white.withOpacity(0.05)),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Text("ENGINE ROTATION", style: GoogleFonts.jetBrainsMono(color: isShiftPoint ? Colors.black.withOpacity(0.5) : Colors.white.withOpacity(0.3), fontSize: 9, letterSpacing: 1, fontWeight: FontWeight.bold)),
+                        Text("${state.rpm} RPM", style: GoogleFonts.exo2(color: isShiftPoint ? Colors.black : Colors.white, fontSize: 18, fontWeight: FontWeight.w900, fontStyle: FontStyle.italic)),
+                      ],
+                    ),
+                    const SizedBox(height: 10),
+                    _buildSegmentedRpmBar(state.rpm, isShiftPoint, accentColor, height: 14, segments: 35),
+                    const SizedBox(height: 6),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: List.generate(15, (i) => Text("$i", style: GoogleFonts.jetBrainsMono(color: isShiftPoint ? Colors.black.withOpacity(0.2) : (i >= 12 ? Colors.red.withOpacity(0.4) : Colors.white.withOpacity(0.1)), fontSize: 7))),
+                    ),
+                  ],
+                ),
+              ),
+
+              const SizedBox(height: 20),
+
+              // BOTTOM STATS
+              Container(
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: Colors.white.withOpacity(0.01),
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: Colors.white.withOpacity(0.03)),
+                ),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceAround,
+                  children: [
+                    _buildCompactStatItem('MIN ACTIVE', state.minRpmActive.round().toString(), 'RPM', isShiftPoint, accentColor),
+                    Container(width: 1, height: 24, color: Colors.white.withOpacity(0.05)),
+                    _buildCompactStatItem('CALIBRATION', state.rpmCalibration.toStringAsFixed(1), 'X', isShiftPoint, accentColor),
+                    Container(width: 1, height: 24, color: Colors.white.withOpacity(0.05)),
+                    _buildCompactStatItem('GPS ACC', state.gpsAccuracy.round().toString(), 'M', isShiftPoint, accentColor),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 8),
+            ],
+          ),
         ),
       ),
     );
+  }
+  }
+
+  Widget _buildCompactStatItem(String label, String value, String unit, bool isShiftPoint, Color accentColor) {
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Text(label, style: GoogleFonts.jetBrainsMono(color: isShiftPoint ? Colors.black.withOpacity(0.5) : Colors.white.withOpacity(0.2), fontSize: 7, fontWeight: FontWeight.bold)),
+        const SizedBox(height: 4),
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.baseline,
+          textBaseline: TextBaseline.alphabetic,
+          children: [
+            Text(value, style: GoogleFonts.exo2(color: isShiftPoint ? Colors.black : Colors.white, fontSize: 16, fontWeight: FontWeight.w900, fontStyle: FontStyle.italic)),
+            const SizedBox(width: 2),
+            Text(unit, style: GoogleFonts.exo2(color: isShiftPoint ? Colors.black : accentColor, fontSize: 8, fontWeight: FontWeight.bold, fontStyle: FontStyle.italic)),
+          ],
+        ),
+      ],
+    );
+  }
   }
 
   Widget _buildCompactStatItem(String label, String value, String unit, bool isShiftPoint, Color accentColor) {
@@ -1085,38 +1062,27 @@ class DashboardPage extends StatelessWidget {
                       Text('Classic (HC-05) & BLE Support', style: TextStyle(fontSize: 8, color: Colors.white.withOpacity(0.2), letterSpacing: 1)),
                     ],
                   ),
-                  Row(
-                    children: [
-                      FutureBuilder(
-                        future: Future.wait([
-                          Permission.bluetoothScan.status,
-                          Permission.bluetoothConnect.status,
-                          Permission.location.status,
-                        ]),
-                        builder: (context, snapshot) {
-                          if (!snapshot.hasData) return const SizedBox();
-                          final statuses = snapshot.data as List<PermissionStatus>;
-                          bool allGranted = statuses.every((s) => s.isGranted);
-                          return Icon(
-                            allGranted ? Icons.check_circle : Icons.warning_amber_rounded,
-                            size: 16,
-                            color: allGranted ? Colors.green : Colors.orange,
-                          );
-                        },
-                      ),
-                      IconButton(
-                      icon: const Icon(Icons.palette, size: 20, color: Colors.purple),
-                      onPressed: () => Navigator.pushNamed(context, '/design_showcase'),
-                      tooltip: 'Design Showcase',
-                    ),
-                    if (!state.isScanning && !state.isConnected)
-                        IconButton(
-                          icon: const Icon(Icons.refresh, size: 20, color: Color(0xFFEF4444)),
-                          onPressed: () => state.startClassicScan(),
-                          tooltip: 'Scan for Devices',
+                  if (!state.isScanning && !state.isConnected)
+                    GestureDetector(
+                      onTap: () => state.startClassicScan(),
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFF00E676).withOpacity(0.1),
+                          borderRadius: BorderRadius.circular(4),
+                          border: Border.all(color: const Color(0xFF00E676).withOpacity(0.3)),
                         ),
-                    ],
-                  ),
+                        child: Text(
+                          'SCAN',
+                          style: GoogleFonts.orbitron(
+                            fontSize: 10,
+                            fontWeight: FontWeight.w900,
+                            color: const Color(0xFF00E676),
+                            letterSpacing: 1,
+                          ),
+                        ),
+                      ),
+                    ),
                 ],
               ),
               const SizedBox(height: 24),
@@ -1253,7 +1219,46 @@ class DashboardPage extends StatelessWidget {
   }
 }
 
-class ConnectionStatusIndicator extends StatefulWidget {
+class _SessionTimer extends StatefulWidget {
+  final DateTime startTime;
+  const _SessionTimer({required this.startTime});
+
+  @override
+  State<_SessionTimer> createState() => _SessionTimerState();
+}
+
+class _SessionTimerState extends State<_SessionTimer> {
+  late Timer _timer;
+  String _timeString = "00:00";
+
+  @override
+  void initState() {
+    super.initState();
+    _timer = Timer.periodic(const Duration(seconds: 1), (timer) {
+      final diff = DateTime.now().difference(widget.startTime);
+      final mins = diff.inMinutes.toString().padLeft(2, '0');
+      final secs = (diff.inSeconds % 60).toString().padLeft(2, '0');
+      if (mounted) setState(() => _timeString = "$mins:$secs");
+    });
+  }
+
+  @override
+  void dispose() {
+    _timer.cancel();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        const Icon(Icons.timer_outlined, size: 10, color: Colors.white24),
+        const SizedBox(width: 4),
+        Text(_timeString, style: GoogleFonts.jetBrainsMono(fontSize: 10, color: Colors.white38, fontWeight: FontWeight.bold)),
+      ],
+    );
+  }
+}
   final bool isConnected;
   final bool isScanning;
   final String? deviceName;
