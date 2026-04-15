@@ -656,7 +656,6 @@ class AppState extends ChangeNotifier {
 
   @override
   void dispose() {
-    _demoTimer?.cancel();
     _raceTimer?.cancel();
     _btSubscription?.cancel();
     _classicConnection?.close();
