@@ -11,6 +11,7 @@ import 'package:flutter_bluetooth_serial/flutter_bluetooth_serial.dart' as class
 import 'package:bluetooth_classic/bluetooth_classic.dart' as btc;
 import 'package:intl/intl.dart';
 import 'package:permission_handler/permission_handler.dart';
+import 'design_showcase.dart';
 // import 'package:flutter_blue_plus/flutter_blue_plus.dart';
 
 void main() {
@@ -717,6 +718,9 @@ class AntasenaApp extends StatelessWidget {
         ),
       ),
       home: const MainNavigation(),
+      routes: {
+        '/design_showcase': (context) => const DesignShowcasePage(),
+      },
     );
   }
 }
@@ -991,7 +995,12 @@ class DashboardPage extends StatelessWidget {
                           );
                         },
                       ),
-                      if (!state.isScanning && !state.isConnected)
+                      IconButton(
+                      icon: const Icon(Icons.palette, size: 20, color: Colors.purple),
+                      onPressed: () => Navigator.pushNamed(context, '/design_showcase'),
+                      tooltip: 'Design Showcase',
+                    ),
+                    if (!state.isScanning && !state.isConnected)
                         IconButton(
                           icon: const Icon(Icons.refresh, size: 20, color: Color(0xFFEF4444)),
                           onPressed: () => state.startClassicScan(),
