@@ -9,7 +9,7 @@ class DesignShowcasePage extends StatefulWidget {
 }
 
 class _DesignShowcasePageState extends State<DesignShowcasePage> {
-  int _selectedStyle = 0; // 0: Hardware, 1: Technical, 2: Brutalist
+  int _selectedStyle = 3; // 0: Hardware, 1: Technical, 2: Brutalist, 3: Aero-Performance
 
   @override
   Widget build(BuildContext context) {
@@ -27,6 +27,7 @@ class _DesignShowcasePageState extends State<DesignShowcasePage> {
               const PopupMenuItem(value: 0, child: Text('Hardware Style')),
               const PopupMenuItem(value: 1, child: Text('Technical Style')),
               const PopupMenuItem(value: 2, child: Text('Brutalist Style')),
+              const PopupMenuItem(value: 3, child: Text('Aero-Performance (NEW)')),
             ],
           )
         ],
@@ -54,6 +55,7 @@ class _DesignShowcasePageState extends State<DesignShowcasePage> {
       case 0: return const Color(0xFF0A0A0A);
       case 1: return const Color(0xFFF0F0F0);
       case 2: return Colors.white;
+      case 3: return const Color(0xFF050505);
       default: return Colors.black;
     }
   }
@@ -95,6 +97,15 @@ class _DesignShowcasePageState extends State<DesignShowcasePage> {
             ),
             const SizedBox(height: 8),
             Text(subtitle.toUpperCase(), style: GoogleFonts.inter(color: Colors.black, fontSize: 12, fontWeight: FontWeight.w900, letterSpacing: 2)),
+          ],
+        );
+      case 3: // Aero-Performance
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.center,
+          children: [
+            Text(title, style: GoogleFonts.orbitron(color: const Color(0xFFEF4444), fontSize: 16, fontWeight: FontWeight.bold, letterSpacing: 4)),
+            const SizedBox(height: 4),
+            Text("SYSTEM READY", style: GoogleFonts.jetBrainsMono(color: Colors.white.withOpacity(0.3), fontSize: 8, letterSpacing: 2)),
           ],
         );
       default: return Container();
@@ -187,16 +198,52 @@ class _DesignShowcasePageState extends State<DesignShowcasePage> {
             )
           ],
         );
+      case 3: // Aero-Performance
+        return Center(
+          child: Stack(
+            alignment: Alignment.center,
+            children: [
+              SizedBox(
+                width: 280,
+                height: 280,
+                child: CircularProgressIndicator(
+                  value: 0.7,
+                  strokeWidth: 12,
+                  backgroundColor: Colors.white.withOpacity(0.05),
+                  valueColor: const AlwaysStoppedAnimation<Color>(Color(0xFFEF4444)),
+                ),
+              ),
+              Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text("SPEED", style: GoogleFonts.jetBrainsMono(color: Colors.white.withOpacity(0.3), fontSize: 12, letterSpacing: 2)),
+                  Text("124", style: GoogleFonts.orbitron(color: Colors.white, fontSize: 84, fontWeight: FontWeight.w900, height: 1)),
+                  Text("KM/H", style: GoogleFonts.jetBrainsMono(color: Colors.white.withOpacity(0.3), fontSize: 14, letterSpacing: 4)),
+                  const SizedBox(height: 20),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFEF4444).withOpacity(0.1),
+                      borderRadius: BorderRadius.circular(4),
+                      border: Border.all(color: const Color(0xFFEF4444).withOpacity(0.3)),
+                    ),
+                    child: Text("8,420 RPM", style: GoogleFonts.jetBrainsMono(color: const Color(0xFFEF4444), fontSize: 14, fontWeight: FontWeight.bold)),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        );
       default: return Container();
     }
   }
 
   Widget _buildDataGrid() {
     List<Map<String, String>> data = [
-      {"label": "SPEED", "value": "124 KM/H"},
-      {"label": "TPS", "value": "85%"},
-      {"label": "TEMP", "value": "82°C"},
-      {"label": "GEAR", "value": "4"},
+      {"label": "0-100 KM/H", "value": "4.2s"},
+      {"label": "200 METER", "value": "8.5s"},
+      {"label": "400 METER", "value": "12.8s"},
+      {"label": "GPS ACC", "value": "2.4m"},
     ];
 
     switch (_selectedStyle) {
@@ -259,8 +306,51 @@ class _DesignShowcasePageState extends State<DesignShowcasePage> {
             ),
           )).toList(),
         );
+      case 3: // Aero-Performance
+        return Column(
+          children: [
+            Row(
+              children: [
+                _buildAeroStatCard(data[0]['label']!, data[0]['value']!, Icons.timer),
+                const SizedBox(width: 12),
+                _buildAeroStatCard(data[1]['label']!, data[1]['value']!, Icons.straighten),
+              ],
+            ),
+            const SizedBox(height: 12),
+            Row(
+              children: [
+                _buildAeroStatCard(data[2]['label']!, data[2]['value']!, Icons.speed),
+                const SizedBox(width: 12),
+                _buildAeroStatCard(data[3]['label']!, data[3]['value']!, Icons.gps_fixed),
+              ],
+            ),
+          ],
+        );
       default: return Container();
     }
+  }
+
+  Widget _buildAeroStatCard(String label, String value, IconData icon) {
+    return Expanded(
+      child: Container(
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: Colors.white.withOpacity(0.03),
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: Colors.white.withOpacity(0.05)),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Icon(icon, size: 14, color: const Color(0xFFEF4444).withOpacity(0.5)),
+            const SizedBox(height: 8),
+            Text(label, style: GoogleFonts.jetBrainsMono(color: Colors.white.withOpacity(0.3), fontSize: 8, fontWeight: FontWeight.bold, letterSpacing: 1)),
+            const SizedBox(height: 4),
+            Text(value, style: GoogleFonts.orbitron(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold)),
+          ],
+        ),
+      ),
+    );
   }
 
   Widget _buildActionButtons() {
@@ -321,6 +411,33 @@ class _DesignShowcasePageState extends State<DesignShowcasePage> {
                 boxShadow: const [BoxShadow(color: Colors.black, offset: Offset(4, 4))],
               ),
               child: Center(child: Text("START TUNING", style: GoogleFonts.inter(fontWeight: FontWeight.w900, fontSize: 18))),
+            ),
+          ],
+        );
+      case 3: // Aero-Performance
+        return Column(
+          children: [
+            Container(
+              width: double.infinity,
+              height: 56,
+              decoration: BoxDecoration(
+                gradient: const LinearGradient(
+                  colors: [Color(0xFFEF4444), Color(0xFFB91C1C)],
+                ),
+                borderRadius: BorderRadius.circular(12),
+                boxShadow: [
+                  BoxShadow(
+                    color: const Color(0xFFEF4444).withOpacity(0.3),
+                    blurRadius: 12,
+                    offset: const Offset(0, 4),
+                  ),
+                ],
+              ),
+              child: Center(
+                child: Text("START RACE SESSION", 
+                  style: GoogleFonts.orbitron(color: Colors.white, fontWeight: FontWeight.bold, letterSpacing: 2)
+                ),
+              ),
             ),
           ],
         );
