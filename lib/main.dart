@@ -778,7 +778,7 @@ class _MainNavigationState extends State<MainNavigation> {
             );
           },
           backgroundColor: const Color(0xFF0A0A0A),
-          selectedItemColor: const Color(0xFFEF4444),
+          selectedItemColor: const Color(0xFF00E676),
           unselectedItemColor: Colors.white.withOpacity(0.3),
           showSelectedLabels: true,
           showUnselectedLabels: true,
@@ -843,7 +843,7 @@ class DashboardPage extends StatelessWidget {
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
                               Text('ANTASENA', style: GoogleFonts.exo2(fontSize: 14, fontWeight: FontWeight.w900, color: isShiftPoint ? Colors.black : Colors.white, letterSpacing: 1)),
-                              Text('SYSTEM ACTIVE // STABLE', style: GoogleFonts.jetBrainsMono(fontSize: 7, fontWeight: FontWeight.bold, color: isShiftPoint ? Colors.black : accentColor)),
+                              Text('PERFORMANCE', style: GoogleFonts.jetBrainsMono(fontSize: 7, fontWeight: FontWeight.bold, color: isShiftPoint ? Colors.black : accentColor)),
                             ],
                           ),
                         ],
@@ -868,7 +868,7 @@ class DashboardPage extends StatelessWidget {
                     ],
                   ),
                   
-                  const SizedBox(height: 24),
+                  const SizedBox(height: 16),
 
                   // PRIMARY RPM INDICATOR (TOP FOCUS)
                   Column(
@@ -889,9 +889,9 @@ class DashboardPage extends StatelessWidget {
                           ),
                         ],
                       ),
-                      const SizedBox(height: 8),
-                      _buildSegmentedRpmBar(state.rpm, isShiftPoint, accentColor, height: 12, segments: 30),
                       const SizedBox(height: 6),
+                      _buildSegmentedRpmBar(state.rpm, isShiftPoint, accentColor, height: 10, segments: 30),
+                      const SizedBox(height: 4),
                       Row(
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
@@ -909,7 +909,7 @@ class DashboardPage extends StatelessWidget {
                   Center(
                     child: Container(
                       width: double.infinity,
-                      padding: const EdgeInsets.symmetric(vertical: 40),
+                      padding: const EdgeInsets.symmetric(vertical: 20),
                       decoration: BoxDecoration(
                         color: Colors.white.withOpacity(0.02),
                         border: Border.symmetric(
@@ -919,21 +919,21 @@ class DashboardPage extends StatelessWidget {
                       child: Column(
                         children: [
                           Text("VELOCITY", style: GoogleFonts.jetBrainsMono(color: isShiftPoint ? Colors.black.withOpacity(0.5) : Colors.white.withOpacity(0.2), fontSize: 10, letterSpacing: 4, fontWeight: FontWeight.bold)),
-                          const SizedBox(height: 10),
+                          const SizedBox(height: 4),
                           Row(
                             mainAxisAlignment: MainAxisAlignment.center,
                             crossAxisAlignment: CrossAxisAlignment.end,
                             children: [
                               Text(state.speed.round().toString(), 
                                 style: GoogleFonts.exo2(
-                                  fontSize: 120, 
+                                  fontSize: 130, 
                                   fontWeight: FontWeight.w900, 
                                   fontStyle: FontStyle.italic,
-                                  height: 0.9,
+                                  height: 0.85,
                                   color: isShiftPoint ? Colors.black : Colors.white,
                                   shadows: [
                                     if (!isShiftPoint)
-                                      Shadow(color: accentColor.withOpacity(0.3), blurRadius: 20),
+                                      Shadow(color: accentColor.withOpacity(0.4), blurRadius: 25),
                                   ],
                                 )
                               ),
@@ -952,7 +952,7 @@ class DashboardPage extends StatelessWidget {
                   
                   // SECONDARY STATS (TIDIED UP AT BOTTOM)
                   Container(
-                    padding: const EdgeInsets.all(16),
+                    padding: const EdgeInsets.all(12),
                     decoration: BoxDecoration(
                       color: Colors.white.withOpacity(0.01),
                       borderRadius: BorderRadius.circular(4),
@@ -962,13 +962,14 @@ class DashboardPage extends StatelessWidget {
                       mainAxisAlignment: MainAxisAlignment.spaceAround,
                       children: [
                         _buildCompactStatItem('MIN ACTIVE', state.minRpmActive.round().toString(), 'RPM', isShiftPoint, accentColor),
-                        Container(width: 1, height: 30, color: Colors.white.withOpacity(0.05)),
+                        Container(width: 1, height: 24, color: Colors.white.withOpacity(0.05)),
                         _buildCompactStatItem('CALIBRATION', state.rpmCalibration.toStringAsFixed(1), 'X', isShiftPoint, accentColor),
-                        Container(width: 1, height: 30, color: Colors.white.withOpacity(0.05)),
+                        Container(width: 1, height: 24, color: Colors.white.withOpacity(0.05)),
                         _buildCompactStatItem('GPS ACC', state.gpsAccuracy.toStringAsFixed(1), 'M', isShiftPoint, accentColor),
                       ],
                     ),
                   ),
+                  const SizedBox(height: 8),
                 ],
               ),
             ),
