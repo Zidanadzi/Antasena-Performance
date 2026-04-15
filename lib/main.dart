@@ -1507,7 +1507,7 @@ class _TuningPageState extends State<TuningPage> {
           Text('RPM CALIBRATION', style: TextStyle(color: Colors.white.withOpacity(0.3), fontSize: 8, fontWeight: FontWeight.bold, letterSpacing: 1)),
           const SizedBox(height: 16),
           Row(
-            children: [0.8, 1.0, 1.2, 1.5].map((v) {
+            children: [0.2, 0.5, 0.8, 1.0, 1.2, 1.5].map((v) {
               bool selected = state.rpmCalibration == v;
               return Expanded(
                 child: GestureDetector(
