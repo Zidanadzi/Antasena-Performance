@@ -1500,17 +1500,19 @@ class _TuningPageState extends State<TuningPage> {
         children: [
           Text('RPM CALIBRATION', style: TextStyle(color: Colors.white.withOpacity(0.3), fontSize: 8, fontWeight: FontWeight.bold, letterSpacing: 1)),
           const SizedBox(height: 16),
-          Row(
-            children: [0.2, 0.5, 0.8, 1.0, 1.2, 1.5].map((v) {
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0, 1.2, 1.5].map((v) {
               bool selected = state.rpmCalibration == v;
-              return Expanded(
+              return SizedBox(
+                width: (MediaQuery.of(context).size.width - 80) / 4,
                 child: GestureDetector(
                   onTap: () => state.setRpmCalibration(v),
                   child: AnimatedContainer(
                     duration: const Duration(milliseconds: 250),
                     curve: Curves.easeOutCubic,
-                    margin: const EdgeInsets.symmetric(horizontal: 4),
-                    padding: const EdgeInsets.symmetric(vertical: 16),
+                    padding: const EdgeInsets.symmetric(vertical: 12),
                     decoration: BoxDecoration(
                       color: selected ? const Color(0xFF00E676) : Colors.transparent,
                       borderRadius: BorderRadius.circular(4),
@@ -1518,14 +1520,6 @@ class _TuningPageState extends State<TuningPage> {
                         color: selected ? const Color(0xFF00E676) : Colors.white.withOpacity(0.05),
                         width: 1,
                       ),
-                      boxShadow: [
-                        if (selected)
-                          BoxShadow(
-                            color: const Color(0xFF00E676).withOpacity(0.3),
-                            blurRadius: 8,
-                            spreadRadius: 1,
-                          ),
-                      ],
                     ),
                     child: Text(
                       '${v}x', 
@@ -1533,8 +1527,7 @@ class _TuningPageState extends State<TuningPage> {
                       style: TextStyle(
                         color: selected ? Colors.black : Colors.white.withOpacity(0.3), 
                         fontWeight: FontWeight.w900, 
-                        fontSize: 12,
-                        letterSpacing: 0.5,
+                        fontSize: 10,
                       )
                     ),
                   ),
