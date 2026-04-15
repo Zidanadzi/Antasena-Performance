@@ -52,6 +52,7 @@ class AppState extends ChangeNotifier {
   classic.BluetoothConnection? _classicConnection;
   StreamSubscription? _btSubscription;
   String _messageBuffer = "";
+  String _lastRawMessage = "No data yet";
   List<classic.BluetoothDevice> _classicDevices = [];
   
   // Racebox
@@ -84,6 +85,7 @@ class AppState extends ChangeNotifier {
   bool get isConnecting => _isConnecting;
   String? get deviceName => _deviceName;
   String? get connectionError => _connectionError;
+  String get lastRawMessage => _lastRawMessage;
   List<classic.BluetoothDevice> get classicDevices => _classicDevices;
   double get raceTime => _raceTime;
   String get raceStatus => _raceStatus;
@@ -373,32 +375,29 @@ class AppState extends ChangeNotifier {
       _deviceName = device.name ?? device.address;
       
       _btSubscription = _classicConnection!.input!.listen((Uint8List data) {
-        _messageBuffer += String.fromCharCodes(data);
+        String incoming = String.fromCharCodes(data);
+        _lastRawMessage = incoming; // Store for debugging
+        _messageBuffer += incoming;
         
         while (_messageBuffer.contains('\n')) {
           int index = _messageBuffer.indexOf('\n');
           String msg = _messageBuffer.substring(0, index).trim();
           _messageBuffer = _messageBuffer.substring(index + 1);
           
-          if (msg.contains('RPM:')) {
-            try {
-              String part = msg.split('RPM:')[1].split(',')[0].trim();
-              int? val = int.tryParse(part);
-              if (val != null) updateRpm(val);
-            } catch (e) {
-              debugPrint('Error parsing RPM: $e');
-            }
+          // More robust Regex parsing
+          final rpmMatch = RegExp(r'RPM\s*:\s*(\d+)').firstMatch(msg);
+          if (rpmMatch != null) {
+            int? val = int.tryParse(rpmMatch.group(1)!);
+            if (val != null) updateRpm(val);
           }
           
-          if (msg.contains('SPEED:')) {
-            try {
-              String part = msg.split('SPEED:')[1].split(',')[0].trim();
-              double? val = double.tryParse(part);
-              if (val != null) _speed = val;
-            } catch (e) {
-              debugPrint('Error parsing Speed: $e');
-            }
+          final speedMatch = RegExp(r'SPEED\s*:\s*([\d.]+)').firstMatch(msg);
+          if (speedMatch != null) {
+            double? val = double.tryParse(speedMatch.group(1)!);
+            if (val != null) _speed = val;
           }
+          
+          notifyListeners();
         }
       });
       
@@ -852,6 +851,21 @@ class DashboardPage extends StatelessWidget {
                   ),
                   
                   const SizedBox(height: 16),
+
+                  // Debug Raw Data (Subtle)
+                  if (state.isConnected)
+                    Container(
+                      margin: const EdgeInsets.only(bottom: 8),
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                      decoration: BoxDecoration(
+                        color: Colors.blue.withOpacity(0.1),
+                        borderRadius: BorderRadius.circular(4),
+                      ),
+                      child: Text(
+                        "RAW: ${state.lastRawMessage.replaceAll('\n', '\\n')}",
+                        style: GoogleFonts.jetBrainsMono(fontSize: 8, color: Colors.blue.withOpacity(0.5)),
+                      ),
+                    ),
 
                   // PRIMARY RPM INDICATOR (TOP FOCUS)
                   Column(
