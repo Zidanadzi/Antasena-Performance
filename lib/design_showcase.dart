@@ -9,7 +9,7 @@ class DesignShowcasePage extends StatefulWidget {
 }
 
 class _DesignShowcasePageState extends State<DesignShowcasePage> {
-  int _selectedStyle = 0; // 0: Stealth Carbon, 1: Minimalist Glass, 2: Retro Arcade, 3: Classic Analog, 4: Stealth Neon, 5: Stealth Red, 6: Stealth Toxic
+  int _selectedStyle = 6; // 0: Stealth Carbon, 1: Minimalist Glass, 2: Retro Arcade, 3: Classic Analog, 4: Stealth Neon, 5: Stealth Red, 6: Stealth Toxic
 
   @override
   Widget build(BuildContext context) {

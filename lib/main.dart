@@ -708,13 +708,13 @@ class AntasenaApp extends StatelessWidget {
       debugShowCheckedModeBanner: false,
       theme: ThemeData(
         brightness: Brightness.dark,
-        scaffoldBackgroundColor: const Color(0xFF050505),
-        primaryColor: const Color(0xFFEF4444),
-        textTheme: GoogleFonts.orbitronTextTheme(ThemeData.dark().textTheme),
+        scaffoldBackgroundColor: const Color(0xFF121212),
+        primaryColor: const Color(0xFF00E676),
+        textTheme: GoogleFonts.exo2TextTheme(ThemeData.dark().textTheme),
         colorScheme: const ColorScheme.dark(
-          primary: Color(0xFFEF4444),
-          secondary: Color(0xFFEF4444),
-          surface: Color(0xFF0F0F0F),
+          primary: Color(0xFF00E676),
+          secondary: Color(0xFF00E676),
+          surface: Color(0xFF1A1A1A),
         ),
       ),
       home: const MainNavigation(),
@@ -803,18 +803,19 @@ class DashboardPage extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final state = context.watch<AppState>();
+    const Color accentColor = Color(0xFF00E676);
     
     // Shift Light Logic: Flash screen if RPM is high
     bool isShiftPoint = state.rpm > 12000;
 
     return Scaffold(
-      backgroundColor: isShiftPoint ? const Color(0xFFEF4444) : Colors.black,
+      backgroundColor: isShiftPoint ? accentColor : const Color(0xFF121212),
       body: SafeArea(
         child: Stack(
           children: [
             // Background Pattern (Subtle Grid)
             Opacity(
-              opacity: 0.05,
+              opacity: 0.03,
               child: GridView.builder(
                 gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(crossAxisCount: 10),
                 itemBuilder: (context, index) => Container(
@@ -834,11 +835,17 @@ class DashboardPage extends StatelessWidget {
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
+                      Row(
                         children: [
-                          Text('ANTASENA', style: GoogleFonts.orbitron(fontSize: 16, fontWeight: FontWeight.w900, color: isShiftPoint ? Colors.black : Colors.white, letterSpacing: 1)),
-                          Text('PERFORMANCE', style: GoogleFonts.orbitron(fontSize: 8, fontWeight: FontWeight.bold, color: isShiftPoint ? Colors.black : const Color(0xFFEF4444), letterSpacing: 2)),
+                          Container(width: 2, height: 24, color: accentColor),
+                          const SizedBox(width: 8),
+                          Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text('ANTASENA', style: GoogleFonts.exo2(fontSize: 14, fontWeight: FontWeight.w900, color: isShiftPoint ? Colors.black : Colors.white, letterSpacing: 1)),
+                              Text('SYSTEM ACTIVE // STABLE', style: GoogleFonts.jetBrainsMono(fontSize: 7, fontWeight: FontWeight.bold, color: isShiftPoint ? Colors.black : accentColor)),
+                            ],
+                          ),
                         ],
                       ),
                       Row(
@@ -848,14 +855,14 @@ class DashboardPage extends StatelessWidget {
                             child: Container(
                               padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                               decoration: BoxDecoration(
-                                color: state.isDemoMode ? const Color(0xFFEF4444) : Colors.white.withOpacity(0.05),
+                                color: state.isDemoMode ? accentColor : Colors.white.withOpacity(0.05),
                                 borderRadius: BorderRadius.circular(2),
                               ),
-                              child: Text('DEMO', style: TextStyle(fontSize: 8, fontWeight: FontWeight.w900, color: state.isDemoMode ? Colors.white : Colors.white.withOpacity(0.2))),
+                              child: Text('DEMO', style: GoogleFonts.jetBrainsMono(fontSize: 8, fontWeight: FontWeight.w900, color: state.isDemoMode ? Colors.black : Colors.white.withOpacity(0.2))),
                             ),
                           ),
                           const SizedBox(width: 8),
-                          _buildStatusIndicator(context, state, isShiftPoint),
+                          _buildStatusIndicator(context, state, isShiftPoint, accentColor),
                         ],
                       ),
                     ],
@@ -863,73 +870,87 @@ class DashboardPage extends StatelessWidget {
                   
                   const Spacer(),
                   
-                  // GIANT RPM DISPLAY
+                  // GIANT RPM DISPLAY (Main Gauge Area)
                   Center(
-                    child: Column(
-                      children: [
-                        Text(state.rpm.toString(), 
-                          style: GoogleFonts.jetBrainsMono(
-                            fontSize: 110, 
-                            fontWeight: FontWeight.w900, 
-                            letterSpacing: -8,
-                            color: isShiftPoint ? Colors.black : Colors.white,
-                          )
-                        ),
-                        Text('RPM', style: TextStyle(color: isShiftPoint ? Colors.black.withOpacity(0.5) : Colors.white.withOpacity(0.2), fontSize: 14, fontWeight: FontWeight.bold, letterSpacing: 4)),
-                      ],
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(vertical: 30, horizontal: 40),
+                      decoration: BoxDecoration(
+                        color: Colors.white.withOpacity(0.02),
+                        border: Border.all(color: Colors.white.withOpacity(0.05)),
+                        borderRadius: BorderRadius.circular(4),
+                      ),
+                      child: Column(
+                        children: [
+                          Text("CURRENT VELOCITY", style: GoogleFonts.jetBrainsMono(color: isShiftPoint ? Colors.black.withOpacity(0.5) : Colors.white.withOpacity(0.3), fontSize: 9, letterSpacing: 2)),
+                          const SizedBox(height: 10),
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            crossAxisAlignment: CrossAxisAlignment.end,
+                            children: [
+                              Text(state.speed.round().toString(), 
+                                style: GoogleFonts.exo2(
+                                  fontSize: 90, 
+                                  fontWeight: FontWeight.w900, 
+                                  fontStyle: FontStyle.italic,
+                                  height: 1,
+                                  color: isShiftPoint ? Colors.black : Colors.white,
+                                )
+                              ),
+                              Padding(
+                                padding: const EdgeInsets.only(bottom: 12, left: 4),
+                                child: Text("KM/H", style: GoogleFonts.exo2(color: isShiftPoint ? Colors.black : accentColor, fontSize: 18, fontWeight: FontWeight.bold, fontStyle: FontStyle.italic)),
+                              ),
+                            ],
+                          ),
+                        ],
+                      ),
                     ),
                   ),
                   
                   const Spacer(),
                   
-                  // SPEED & STATS (BOTTOM)
-                  Row(
-                    crossAxisAlignment: CrossAxisAlignment.end,
+                  // SECONDARY STATS GRID
+                  GridView.count(
+                    shrinkWrap: true,
+                    physics: const NeverScrollableScrollPhysics(),
+                    crossAxisCount: 2,
+                    mainAxisSpacing: 12,
+                    crossAxisSpacing: 12,
+                    childAspectRatio: 2.2,
                     children: [
-                      // Giant Speed
-                      Expanded(
-                        flex: 2,
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text('SPEED', style: TextStyle(color: isShiftPoint ? Colors.black.withOpacity(0.5) : Colors.white.withOpacity(0.2), fontSize: 10, fontWeight: FontWeight.bold, letterSpacing: 2)),
-                            Row(
-                              crossAxisAlignment: CrossAxisAlignment.baseline,
-                              textBaseline: TextBaseline.alphabetic,
-                              children: [
-                                Text(state.speed.round().toString(), 
-                                  style: GoogleFonts.jetBrainsMono(
-                                    fontSize: 64, 
-                                    fontWeight: FontWeight.bold, 
-                                    color: isShiftPoint ? Colors.black : const Color(0xFFEF4444)
-                                  )
-                                ),
-                                const SizedBox(width: 8),
-                                Text('KM/H', style: TextStyle(color: isShiftPoint ? Colors.black.withOpacity(0.5) : Colors.white.withOpacity(0.1), fontSize: 14, fontWeight: FontWeight.bold)),
-                              ],
-                            ),
-                          ],
-                        ),
-                      ),
-                      
-                      // Secondary Stats
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.end,
-                          children: [
-                            _buildCompactStat('MIN RPM', state.minRpmActive.round().toString(), isShiftPoint),
-                            const SizedBox(height: 12),
-                            _buildCompactStat('CALIB', '${state.rpmCalibration}x', isShiftPoint),
-                          ],
-                        ),
-                      ),
+                      _buildStealthStatTile('ENGINE RPM', state.rpm.toString(), 'RPM', isShiftPoint, accentColor),
+                      _buildStealthStatTile('MIN ACTIVE', state.minRpmActive.round().toString(), 'RPM', isShiftPoint, accentColor),
+                      _buildStealthStatTile('CALIBRATION', state.rpmCalibration.toStringAsFixed(1), 'X', isShiftPoint, accentColor),
+                      _buildStealthStatTile('GPS ACC', state.gpsAccuracy.toStringAsFixed(1), 'M', isShiftPoint, accentColor),
                     ],
                   ),
                   
-                  const SizedBox(height: 20),
+                  const SizedBox(height: 25),
                   
-                  // Bottom Progress Bar (RPM Range)
-                  _buildStealthRpmBar(state.rpm, isShiftPoint),
+                  // ENGINE ROTATION BAR
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Text("ENGINE ROTATION", style: GoogleFonts.jetBrainsMono(color: isShiftPoint ? Colors.black.withOpacity(0.5) : Colors.white.withOpacity(0.3), fontSize: 8, letterSpacing: 1)),
+                          Text("${state.rpm} RPM", style: GoogleFonts.jetBrainsMono(color: isShiftPoint ? Colors.black : Colors.white, fontSize: 10, fontWeight: FontWeight.bold)),
+                        ],
+                      ),
+                      const SizedBox(height: 6),
+                      _buildSegmentedRpmBar(state.rpm, isShiftPoint, accentColor),
+                      const SizedBox(height: 4),
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Text("0", style: GoogleFonts.jetBrainsMono(color: isShiftPoint ? Colors.black.withOpacity(0.2) : Colors.white.withOpacity(0.1), fontSize: 7)),
+                          Text("7K", style: GoogleFonts.jetBrainsMono(color: isShiftPoint ? Colors.black.withOpacity(0.2) : Colors.white.withOpacity(0.1), fontSize: 7)),
+                          Text("14K", style: GoogleFonts.jetBrainsMono(color: isShiftPoint ? Colors.black.withOpacity(0.2) : Colors.red.withOpacity(0.3), fontSize: 7)),
+                        ],
+                      ),
+                    ],
+                  ),
                 ],
               ),
             ),
@@ -939,12 +960,71 @@ class DashboardPage extends StatelessWidget {
     );
   }
 
-  Widget _buildStatusIndicator(BuildContext context, AppState state, bool isShiftPoint) {
+  Widget _buildStealthStatTile(String label, String value, String unit, bool isShiftPoint, Color accentColor) {
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: Colors.white.withOpacity(0.01),
+        border: Border.all(color: isShiftPoint ? Colors.black.withOpacity(0.2) : Colors.white.withOpacity(0.05)),
+        borderRadius: BorderRadius.circular(2),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Text(label, style: GoogleFonts.jetBrainsMono(color: isShiftPoint ? Colors.black.withOpacity(0.5) : Colors.white.withOpacity(0.2), fontSize: 7, fontWeight: FontWeight.bold, letterSpacing: 1)),
+          const SizedBox(height: 4),
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.baseline,
+            textBaseline: TextBaseline.alphabetic,
+            children: [
+              Text(value, style: GoogleFonts.exo2(color: isShiftPoint ? Colors.black : Colors.white, fontSize: 18, fontWeight: FontWeight.w900, fontStyle: FontStyle.italic)),
+              const SizedBox(width: 2),
+              Text(unit, style: GoogleFonts.exo2(color: isShiftPoint ? Colors.black : accentColor, fontSize: 8, fontWeight: FontWeight.bold, fontStyle: FontStyle.italic)),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildSegmentedRpmBar(int rpm, bool isShiftPoint, Color accentColor) {
+    const int totalSegments = 20;
+    double progress = (rpm / 14000).clamp(0.0, 1.0);
+    int activeSegments = (progress * totalSegments).round();
+
+    return Stack(
+      children: [
+        Container(
+          height: 6,
+          width: double.infinity,
+          decoration: BoxDecoration(
+            color: isShiftPoint ? Colors.black.withOpacity(0.1) : Colors.white.withOpacity(0.05),
+            borderRadius: BorderRadius.circular(1),
+          ),
+        ),
+        Row(
+          children: List.generate(totalSegments, (i) => Expanded(
+            child: Container(
+              margin: const EdgeInsets.symmetric(horizontal: 1),
+              height: 6,
+              color: i < activeSegments 
+                ? (isShiftPoint ? Colors.black : accentColor) 
+                : Colors.transparent,
+            ),
+          )),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildStatusIndicator(BuildContext context, AppState state, bool isShiftPoint, Color accentColor) {
     return ConnectionStatusIndicator(
       isConnected: state.isConnected,
       isScanning: state.isScanning,
       deviceName: state.deviceName,
       isShiftPoint: isShiftPoint,
+      accentColor: accentColor,
       onTap: () => _showBluetoothScanner(context, state),
     );
   }
@@ -1136,9 +1216,9 @@ class DashboardPage extends StatelessWidget {
       onTap: isConnecting ? null : onTap,
       contentPadding: EdgeInsets.zero,
       title: Text(name, style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold)),
-      subtitle: Text(status, style: TextStyle(fontSize: 10, color: connected ? const Color(0xFF00FF00) : (status == 'CONNECT' ? const Color(0xFFEF4444) : Colors.white24))),
+      subtitle: Text(status, style: TextStyle(fontSize: 10, color: connected ? const Color(0xFF00FF00) : (status == 'CONNECT' ? const Color(0xFF00E676) : Colors.white24))),
       trailing: isConnecting 
-        ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: Color(0xFFEF4444)))
+        ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: Color(0xFF00E676)))
         : Icon(connected ? Icons.bluetooth_connected : Icons.bluetooth, color: connected ? const Color(0xFF00FF00) : Colors.white10),
     );
   }
@@ -1198,6 +1278,7 @@ class ConnectionStatusIndicator extends StatefulWidget {
   final bool isScanning;
   final String? deviceName;
   final bool isShiftPoint;
+  final Color accentColor;
   final VoidCallback onTap;
 
   const ConnectionStatusIndicator({
@@ -1206,6 +1287,7 @@ class ConnectionStatusIndicator extends StatefulWidget {
     required this.isScanning,
     this.deviceName,
     required this.isShiftPoint,
+    required this.accentColor,
     required this.onTap,
   });
 
@@ -1237,14 +1319,14 @@ class _ConnectionStatusIndicatorState extends State<ConnectionStatusIndicator> w
 
   @override
   Widget build(BuildContext context) {
-    Color statusColor = const Color(0xFFFF0000); // Red
+    Color statusColor = widget.isShiftPoint ? Colors.black : widget.accentColor;
     String statusText = 'DISCONNECTED';
     
     if (widget.isConnected) {
-      statusColor = const Color(0xFF00FF00); // Green
+      statusColor = const Color(0xFF00FF00); // Green for connection
       statusText = widget.deviceName ?? 'CONNECTED';
     } else if (widget.isScanning) {
-      statusColor = const Color(0xFFFFFF00); // Yellow
+      statusColor = widget.isShiftPoint ? Colors.black : widget.accentColor;
       statusText = 'SCANNING...';
     }
 
@@ -1286,7 +1368,7 @@ class _ConnectionStatusIndicatorState extends State<ConnectionStatusIndicator> w
             Flexible(
               child: Text(statusText.toUpperCase(), 
                 overflow: TextOverflow.ellipsis,
-                style: TextStyle(
+                style: GoogleFonts.jetBrainsMono(
                   fontSize: 8, 
                   fontWeight: FontWeight.w900, 
                   color: widget.isShiftPoint ? Colors.black : Colors.white,
