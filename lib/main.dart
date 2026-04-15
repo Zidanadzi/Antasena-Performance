@@ -846,66 +846,35 @@ class DashboardPage extends StatelessWidget {
                   
                   const SizedBox(height: 16),
 
-                  // Debug Raw Data (Subtle)
-                  if (state.isConnected)
-                    Container(
-                      margin: const EdgeInsets.only(bottom: 8),
-                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                      decoration: BoxDecoration(
-                        color: Colors.blue.withOpacity(0.1),
-                        borderRadius: BorderRadius.circular(4),
-                      ),
-                      child: Text(
-                        "RAW: ${state.lastRawMessage.replaceAll('\n', '\\n')}",
-                        style: GoogleFonts.jetBrainsMono(fontSize: 8, color: Colors.blue.withOpacity(0.5)),
+                  // System Status Indicator
+                  Container(
+                    margin: const EdgeInsets.only(bottom: 8),
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: (state.isConnected ? accentColor : Colors.red).withOpacity(0.1),
+                      borderRadius: BorderRadius.circular(4),
+                    ),
+                    child: Text(
+                      state.isConnected ? "SYSTEM ON" : "SYSTEM OFF",
+                      style: GoogleFonts.jetBrainsMono(
+                        fontSize: 8, 
+                        color: (state.isConnected ? accentColor : Colors.red).withOpacity(0.5),
+                        fontWeight: FontWeight.bold,
                       ),
                     ),
-
-                  // PRIMARY RPM INDICATOR (TOP FOCUS)
-                  Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          Text("ENGINE ROTATION", style: GoogleFonts.jetBrainsMono(color: isShiftPoint ? Colors.black.withOpacity(0.5) : Colors.white.withOpacity(0.3), fontSize: 9, letterSpacing: 1, fontWeight: FontWeight.bold)),
-                          Row(
-                            crossAxisAlignment: CrossAxisAlignment.baseline,
-                            textBaseline: TextBaseline.alphabetic,
-                            children: [
-                              Text("${state.rpm}", style: GoogleFonts.exo2(color: isShiftPoint ? Colors.black : Colors.white, fontSize: 18, fontWeight: FontWeight.w900, fontStyle: FontStyle.italic)),
-                              const SizedBox(width: 4),
-                              Text("RPM", style: GoogleFonts.exo2(color: isShiftPoint ? Colors.black : accentColor, fontSize: 10, fontWeight: FontWeight.bold)),
-                            ],
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 6),
-                      _buildSegmentedRpmBar(state.rpm, isShiftPoint, accentColor, height: 10, segments: 30),
-                      const SizedBox(height: 4),
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          Text("0", style: GoogleFonts.jetBrainsMono(color: isShiftPoint ? Colors.black.withOpacity(0.2) : Colors.white.withOpacity(0.1), fontSize: 8)),
-                          Text("7K", style: GoogleFonts.jetBrainsMono(color: isShiftPoint ? Colors.black.withOpacity(0.2) : Colors.white.withOpacity(0.1), fontSize: 8)),
-                          Text("14K", style: GoogleFonts.jetBrainsMono(color: isShiftPoint ? Colors.black.withOpacity(0.2) : Colors.red.withOpacity(0.4), fontSize: 8, fontWeight: FontWeight.bold)),
-                        ],
-                      ),
-                    ],
                   ),
-                  
-                  const Spacer(),
-                  
-                  // GIANT SPEEDOMETER (CENTRAL FOCUS)
+
+                  const SizedBox(height: 12),
+
+                  // GIANT SPEEDOMETER (TOP FOCUS)
                   Center(
                     child: Container(
                       width: double.infinity,
-                      padding: const EdgeInsets.symmetric(vertical: 20),
+                      padding: const EdgeInsets.symmetric(vertical: 16),
                       decoration: BoxDecoration(
                         color: Colors.white.withOpacity(0.02),
-                        border: Border.symmetric(
-                          horizontal: BorderSide(color: Colors.white.withOpacity(0.05)),
-                        ),
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(color: Colors.white.withOpacity(0.05)),
                       ),
                       child: Column(
                         children: [
@@ -917,7 +886,7 @@ class DashboardPage extends StatelessWidget {
                             children: [
                               Text(state.speed.round().toString(), 
                                 style: GoogleFonts.exo2(
-                                  fontSize: 130, 
+                                  fontSize: 110, 
                                   fontWeight: FontWeight.w900, 
                                   fontStyle: FontStyle.italic,
                                   height: 0.85,
@@ -929,13 +898,56 @@ class DashboardPage extends StatelessWidget {
                                 )
                               ),
                               Padding(
-                                padding: const EdgeInsets.only(bottom: 12, left: 8),
-                                child: Text("KM/H", style: GoogleFonts.exo2(color: isShiftPoint ? Colors.black : accentColor, fontSize: 24, fontWeight: FontWeight.bold, fontStyle: FontStyle.italic)),
+                                padding: const EdgeInsets.only(bottom: 10, left: 6),
+                                child: Text("KM/H", style: GoogleFonts.exo2(color: isShiftPoint ? Colors.black : accentColor, fontSize: 20, fontWeight: FontWeight.bold, fontStyle: FontStyle.italic)),
                               ),
                             ],
                           ),
                         ],
                       ),
+                    ),
+                  ),
+                  
+                  const Spacer(),
+
+                  // PRIMARY RPM INDICATOR (CENTRAL FOCUS)
+                  Container(
+                    padding: const EdgeInsets.all(16),
+                    decoration: BoxDecoration(
+                      color: Colors.white.withOpacity(0.01),
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(color: Colors.white.withOpacity(0.03)),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Text("ENGINE ROTATION", style: GoogleFonts.jetBrainsMono(color: isShiftPoint ? Colors.black.withOpacity(0.5) : Colors.white.withOpacity(0.3), fontSize: 9, letterSpacing: 1, fontWeight: FontWeight.bold)),
+                            Row(
+                              crossAxisAlignment: CrossAxisAlignment.baseline,
+                              textBaseline: TextBaseline.alphabetic,
+                              children: [
+                                Text("${state.rpm}", style: GoogleFonts.exo2(color: isShiftPoint ? Colors.black : Colors.white, fontSize: 24, fontWeight: FontWeight.w900, fontStyle: FontStyle.italic)),
+                                const SizedBox(width: 4),
+                                Text("RPM", style: GoogleFonts.exo2(color: isShiftPoint ? Colors.black : accentColor, fontSize: 12, fontWeight: FontWeight.bold)),
+                              ],
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 10),
+                        _buildSegmentedRpmBar(state.rpm, isShiftPoint, accentColor, height: 14, segments: 35),
+                        const SizedBox(height: 6),
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Text("0", style: GoogleFonts.jetBrainsMono(color: isShiftPoint ? Colors.black.withOpacity(0.2) : Colors.white.withOpacity(0.1), fontSize: 8)),
+                            Text("7K", style: GoogleFonts.jetBrainsMono(color: isShiftPoint ? Colors.black.withOpacity(0.2) : Colors.white.withOpacity(0.1), fontSize: 8)),
+                            Text("14K", style: GoogleFonts.jetBrainsMono(color: isShiftPoint ? Colors.black.withOpacity(0.2) : Colors.red.withOpacity(0.4), fontSize: 8, fontWeight: FontWeight.bold)),
+                          ],
+                        ),
+                      ],
                     ),
                   ),
                   
@@ -1569,7 +1581,6 @@ class _TuningPageState extends State<TuningPage> {
             color: Colors.white.withOpacity(0.03),
             child: const Row(
               children: [
-                Expanded(child: Text('STAGE', style: TextStyle(fontSize: 9, fontWeight: FontWeight.w900, color: Colors.white24, letterSpacing: 1))),
                 Expanded(flex: 2, child: Text('RPM THRESHOLD', style: TextStyle(fontSize: 9, fontWeight: FontWeight.w900, color: Colors.white24, letterSpacing: 1))),
                 Expanded(child: Text('KILL (MS)', style: TextStyle(fontSize: 9, fontWeight: FontWeight.w900, color: Colors.white24, letterSpacing: 1))),
               ],
@@ -1585,42 +1596,39 @@ class _TuningPageState extends State<TuningPage> {
               child: Row(
                 children: [
                   Expanded(
-                    child: Row(
-                      children: [
-                        Container(
-                          width: 3,
-                          height: 12,
-                          decoration: BoxDecoration(
-                            color: const Color(0xFF00E676),
-                            borderRadius: BorderRadius.circular(1),
-                          ),
-                        ),
-                        const SizedBox(width: 8),
-                        Text('S${i+1}', style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w900, fontSize: 13)),
-                      ],
-                    )
-                  ),
-                  Expanded(
                     flex: 2, 
                     child: GestureDetector(
                       onTap: () {
                         setState(() => _editingRpmIndex = i);
-                        _showEditDialog(context, 'RPM THRESHOLD S${i+1}', state.tableRpm[i].toString(), (val) {
+                        _showEditDialog(context, 'RPM THRESHOLD', state.tableRpm[i].toString(), (val) {
                           state.setTableRpm(i, int.tryParse(val) ?? 0);
                         }, onDismiss: () => setState(() => _editingRpmIndex = null));
                       },
                       child: Container(
                         padding: const EdgeInsets.symmetric(vertical: 4),
-                        child: Text(
-                          state.tableRpm[i].toString(), 
-                          style: GoogleFonts.jetBrainsMono(
-                            fontWeight: FontWeight.bold, 
-                            fontSize: 16,
-                            color: _editingRpmIndex == i ? const Color(0xFFFFFFFF) : Colors.white.withOpacity(0.9),
-                            shadows: _editingRpmIndex == i ? [
-                              const Shadow(color: Colors.white, blurRadius: 10),
-                            ] : null,
-                          )
+                        child: Row(
+                          children: [
+                            Container(
+                              width: 3,
+                              height: 12,
+                              decoration: BoxDecoration(
+                                color: const Color(0xFF00E676),
+                                borderRadius: BorderRadius.circular(1),
+                              ),
+                            ),
+                            const SizedBox(width: 12),
+                            Text(
+                              state.tableRpm[i].toString(), 
+                              style: GoogleFonts.jetBrainsMono(
+                                fontWeight: FontWeight.bold, 
+                                fontSize: 16,
+                                color: _editingRpmIndex == i ? const Color(0xFFFFFFFF) : Colors.white.withOpacity(0.9),
+                                shadows: _editingRpmIndex == i ? [
+                                  const Shadow(color: Colors.white, blurRadius: 10),
+                                ] : null,
+                              )
+                            ),
+                          ],
                         ),
                       )
                     )
@@ -1629,7 +1637,7 @@ class _TuningPageState extends State<TuningPage> {
                     child: GestureDetector(
                       onTap: () {
                         setState(() => _editingKillIndex = i);
-                        _showEditDialog(context, 'KILL TIME S${i+1}', state.tableKill[i].toString(), (val) {
+                        _showEditDialog(context, 'KILL TIME', state.tableKill[i].toString(), (val) {
                           state.setTableKill(i, int.tryParse(val) ?? 0);
                         }, onDismiss: () => setState(() => _editingKillIndex = null));
                       },
