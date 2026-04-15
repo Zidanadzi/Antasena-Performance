@@ -1222,55 +1222,6 @@ class DashboardPage extends StatelessWidget {
         : Icon(connected ? Icons.bluetooth_connected : Icons.bluetooth, color: connected ? const Color(0xFF00FF00) : Colors.white10),
     );
   }
-
-  Widget _buildCompactStat(String label, String value, bool isShiftPoint) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.end,
-      children: [
-        Text(label, style: TextStyle(color: isShiftPoint ? Colors.black.withOpacity(0.5) : Colors.white.withOpacity(0.2), fontSize: 8, fontWeight: FontWeight.bold)),
-        Text(value, style: GoogleFonts.jetBrainsMono(fontSize: 16, fontWeight: FontWeight.bold, color: isShiftPoint ? Colors.black : Colors.white)),
-      ],
-    );
-  }
-
-  Widget _buildStealthRpmBar(int rpm, bool isShiftPoint) {
-    const int totalBlocks = 25;
-    double progress = (rpm / 14000).clamp(0.0, 1.0);
-    int activeBlocks = (progress * totalBlocks).round();
-
-    return Column(
-      children: [
-        SizedBox(
-          height: 16,
-          width: double.infinity,
-          child: Row(
-            children: List.generate(totalBlocks, (index) {
-              bool isActive = index < activeBlocks;
-              return Expanded(
-                child: Container(
-                  margin: const EdgeInsets.symmetric(horizontal: 1),
-                  decoration: BoxDecoration(
-                    color: isActive 
-                      ? (isShiftPoint ? Colors.black : const Color(0xFFEF4444))
-                      : (isShiftPoint ? Colors.black.withOpacity(0.1) : Colors.white.withOpacity(0.05)),
-                    borderRadius: BorderRadius.circular(1),
-                    boxShadow: [
-                      if (isActive && !isShiftPoint) 
-                        BoxShadow(
-                          color: const Color(0xFFEF4444).withOpacity(0.3), 
-                          blurRadius: 4,
-                          spreadRadius: 0,
-                        )
-                    ],
-                  ),
-                ),
-              );
-            }),
-          ),
-        ),
-      ],
-    );
-  }
 }
 
 class ConnectionStatusIndicator extends StatefulWidget {
