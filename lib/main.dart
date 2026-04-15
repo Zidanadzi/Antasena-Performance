@@ -1489,33 +1489,44 @@ class _TuningPageState extends State<TuningPage> {
 
   Widget _buildStealthCalibrationSelector(AppState state) {
     return Container(
-      padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
         color: const Color(0xFF0A0A0A),
         borderRadius: BorderRadius.circular(8),
         border: Border.all(color: Colors.white.withOpacity(0.08)),
       ),
+      clipBehavior: Clip.antiAlias,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text('RPM CALIBRATION', style: TextStyle(color: Colors.white.withOpacity(0.3), fontSize: 8, fontWeight: FontWeight.bold, letterSpacing: 1)),
-          const SizedBox(height: 16),
-          Wrap(
-            spacing: 6,
-            runSpacing: 6,
-            children: [
-              0.5, 0.6, 0.7, 0.8, 0.85, 0.9, 0.95, 1.0, 
-              1.05, 1.1, 1.15, 1.2, 1.25, 1.3, 1.4, 1.5
-            ].map((v) {
-              bool selected = state.rpmCalibration == v;
-              return SizedBox(
-                width: (MediaQuery.of(context).size.width - 84) / 4,
-                child: GestureDetector(
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 20),
+            color: Colors.white.withOpacity(0.03),
+            child: const Text(
+              'RPM CALIBRATION', 
+              style: TextStyle(fontSize: 9, fontWeight: FontWeight.w900, color: Colors.white24, letterSpacing: 1.5)
+            ),
+          ),
+          Padding(
+            padding: const EdgeInsets.all(12),
+            child: GridView.count(
+              shrinkWrap: true,
+              physics: const NeverScrollableScrollPhysics(),
+              crossAxisCount: 4,
+              mainAxisSpacing: 8,
+              crossAxisSpacing: 8,
+              childAspectRatio: 1.8,
+              children: [
+                0.5, 0.6, 0.7, 0.8, 0.85, 0.9, 0.95, 1.0, 
+                1.05, 1.1, 1.15, 1.2, 1.25, 1.3, 1.4, 1.5
+              ].map((v) {
+                bool selected = state.rpmCalibration == v;
+                return GestureDetector(
                   onTap: () => state.setRpmCalibration(v),
                   child: AnimatedContainer(
                     duration: const Duration(milliseconds: 200),
                     curve: Curves.easeOutCubic,
-                    padding: const EdgeInsets.symmetric(vertical: 10),
+                    alignment: Alignment.center,
                     decoration: BoxDecoration(
                       color: selected ? const Color(0xFF00E676) : Colors.white.withOpacity(0.02),
                       borderRadius: BorderRadius.circular(4),
@@ -1526,17 +1537,16 @@ class _TuningPageState extends State<TuningPage> {
                     ),
                     child: Text(
                       '${v}x', 
-                      textAlign: TextAlign.center, 
                       style: TextStyle(
                         color: selected ? Colors.black : Colors.white.withOpacity(0.4), 
                         fontWeight: selected ? FontWeight.w900 : FontWeight.bold, 
-                        fontSize: 9,
+                        fontSize: 10,
                       )
                     ),
                   ),
-                ),
-              );
-            }).toList(),
+                );
+              }).toList(),
+            ),
           ),
         ],
       ),
