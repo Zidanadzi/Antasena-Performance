@@ -991,27 +991,11 @@ class DashboardPage extends StatelessWidget {
                           );
                         },
                       ),
-                      const SizedBox(width: 8),
-                      IconButton(
-                        icon: const Icon(Icons.security, size: 20, color: Colors.blue),
-                        onPressed: () async {
-                          final scan = await Permission.bluetoothScan.status;
-                          final connect = await Permission.bluetoothConnect.status;
-                          final bt = await Permission.bluetooth.status;
-                          final loc = await Permission.location.status;
-                          state.setConnectionError('DEBUG: Scan=$scan, Connect=$connect, BT=$bt, Loc=$loc');
-                        },
-                        tooltip: 'Check Permissions',
-                      ),
-                      IconButton(
-                        icon: const Icon(Icons.add_moderator, size: 20, color: Colors.green),
-                        onPressed: () => state.requestManualPermissions(),
-                        tooltip: 'Request Permissions',
-                      ),
                       if (!state.isScanning && !state.isConnected)
                         IconButton(
                           icon: const Icon(Icons.refresh, size: 20, color: Color(0xFFEF4444)),
                           onPressed: () => state.startClassicScan(),
+                          tooltip: 'Scan for Devices',
                         ),
                     ],
                   ),
