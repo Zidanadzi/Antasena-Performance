@@ -423,17 +423,16 @@ class AppState extends ChangeNotifier {
             
             _lastRawMessage = msg; // For Debug Console
 
-            // Enhanced RPM Parsing
+            // Simpler & Faster RPM Parsing
             if (msg.contains('RPM:')) {
               try {
                 final parts = msg.split('RPM:');
                 if (parts.length > 1) {
                   String valStr = parts[1].trim();
-                  // Extract only digits from the start of the string
-                  RegExp digits = RegExp(r'^\d+');
-                  String? match = digits.stringMatch(valStr);
-                  if (match != null) {
-                    int? val = int.tryParse(match);
+                  // Ambil angka saja
+                  String digitsOnly = valStr.replaceAll(RegExp(r'[^0-9]'), '');
+                  if (digitsOnly.isNotEmpty) {
+                    int? val = int.tryParse(digitsOnly);
                     if (val != null) updateRpm(val);
                   }
                 }
@@ -516,13 +515,11 @@ class AppState extends ChangeNotifier {
   void updateRpm(int val) {
     double targetRpm = val * _rpmCalibration;
     
-    if (_rpmSmoothing >= 1.0) {
-      // OFF means use 100% new data
+    // Sederhanakan: Jika smoothing di atas 0.9 (90%), anggap OFF agar tidak delay
+    if (_rpmSmoothing >= 0.95) {
       _rpm = targetRpm.round();
     } else {
-      // Exponential Moving Average
-      // smoothing 0.1 means 10% old, 90% new
-      // smoothing 0.9 means 90% old, 10% new
+      // Exponential Moving Average yang lebih stabil
       _rpm = ((_rpm * _rpmSmoothing) + (targetRpm * (1.0 - _rpmSmoothing))).round();
     }
     notifyListeners();
