@@ -55,6 +55,8 @@ class AppState extends ChangeNotifier {
   StreamSubscription? _btSubscription;
   String _messageBuffer = "";
   String _lastRawMessage = "No data yet";
+  int _totalBytesReceived = 0;
+  String _rawHexData = "";
   List<classic.BluetoothDevice> _classicDevices = [];
   
   // Racebox
@@ -104,6 +106,8 @@ class AppState extends ChangeNotifier {
   String? get deviceName => _deviceName;
   String? get connectionError => _connectionError;
   String get lastRawMessage => _lastRawMessage;
+  int get totalBytesReceived => _totalBytesReceived;
+  String get rawHexData => _rawHexData;
   List<classic.BluetoothDevice> get classicDevices => _classicDevices;
   double get raceTime => _raceTime;
   String get raceStatus => _raceStatus;
@@ -399,31 +403,49 @@ class AppState extends ChangeNotifier {
       _deviceName = device.name ?? device.address;
       
       _btSubscription = _classicConnection!.input!.listen((Uint8List data) {
+        _totalBytesReceived += data.length;
         String incoming = String.fromCharCodes(data);
-        _lastRawMessage = incoming; // Store for debugging
         _messageBuffer += incoming;
         
-        while (_messageBuffer.contains('\n')) {
-          int index = _messageBuffer.indexOf('\n');
-          String msg = _messageBuffer.substring(0, index).trim();
-          _messageBuffer = _messageBuffer.substring(index + 1);
+        // Simple and robust line splitting
+        if (_messageBuffer.contains('\n') || _messageBuffer.contains('\r')) {
+          List<String> lines = _messageBuffer.split(RegExp(r'[\n\r]+'));
           
-          // More robust Regex parsing for RPM only
-          final rpmMatch = RegExp(r'RPM\s*[:=]\s*(\d+)').firstMatch(msg);
-          if (rpmMatch != null) {
-            int? val = int.tryParse(rpmMatch.group(1)!);
-            if (val != null) updateRpm(val);
+          // If the buffer doesn't end with a newline, the last element is incomplete
+          bool endsWithNewline = _messageBuffer.endsWith('\n') || _messageBuffer.endsWith('\r');
+          if (!endsWithNewline && lines.isNotEmpty) {
+            _messageBuffer = lines.removeLast();
+          } else {
+            _messageBuffer = "";
           }
 
-          // Detect Quick Shifter signal
-          if (msg.contains('QS_EVENT:')) {
-            triggerShiftNotification();
-          }
+          for (String line in lines) {
+            String msg = line.trim();
+            if (msg.isEmpty) continue;
+            
+            _lastRawMessage = msg; // For Debug Console
 
-          if (msg.contains('SHIFT!')) {
-            triggerShiftNotification();
+            // Simple RPM Parsing
+            if (msg.contains('RPM:')) {
+              try {
+                final parts = msg.split('RPM:');
+                if (parts.length > 1) {
+                  String valStr = parts[1].trim();
+                  // Remove any non-digit characters that might be trailing
+                  valStr = valStr.split(RegExp(r'[^0-9]'))[0];
+                  int? val = int.tryParse(valStr);
+                  if (val != null) updateRpm(val);
+                }
+              } catch (e) {
+                debugPrint("Parse error: $e");
+              }
+            }
+
+            // Quick Shifter / Shift Light Signals
+            if (msg.contains('QS_EVENT') || msg.contains('SHIFT!')) {
+              triggerShiftNotification();
+            }
           }
-          
           notifyListeners();
         }
       });
@@ -491,24 +513,8 @@ class AppState extends ChangeNotifier {
   }
 
   void updateRpm(int val) {
-    double calibratedVal = val * _rpmCalibration;
-    
-    if (_useKalmanFilter) {
-      // Kalman Filter implementation
-      // Prediction step
-      _kalmanP = _kalmanP + _kalmanQ;
-      
-      // Update step
-      double k = _kalmanP / (_kalmanP + _kalmanR);
-      _kalmanX = _kalmanX + k * (calibratedVal - _kalmanX);
-      _kalmanP = (1 - k) * _kalmanP;
-      
-      _rpm = _kalmanX.round();
-    } else {
-      // Exponential Moving Average (EMA) for smoothing/debounce
-      // new_rpm = (smoothing * new_val) + ((1 - smoothing) * old_rpm)
-      _rpm = ((_rpmSmoothing * calibratedVal) + ((1 - _rpmSmoothing) * _rpm)).round();
-    }
+    // Direct update without complex filtering for stability
+    _rpm = (val * _rpmCalibration).round();
     notifyListeners();
   }
 
@@ -928,7 +934,6 @@ class DashboardPage extends StatelessWidget {
               Center(
                 child: Column(
                   children: [
-                    Text("VELOCITY", style: GoogleFonts.jetBrainsMono(color: isShiftPoint ? Colors.black.withOpacity(0.5) : Colors.white.withOpacity(0.2), fontSize: 10, letterSpacing: 4, fontWeight: FontWeight.bold)),
                     Row(
                       mainAxisAlignment: MainAxisAlignment.center,
                       crossAxisAlignment: CrossAxisAlignment.end,
@@ -1498,12 +1503,51 @@ class _TuningPageState extends State<TuningPage> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text('LAST RAW MESSAGE:', style: TextStyle(color: Colors.white.withOpacity(0.3), fontSize: 8, fontWeight: FontWeight.bold)),
-                  const SizedBox(height: 8),
-                  Text(
-                    state.lastRawMessage.isEmpty ? 'Waiting for data...' : state.lastRawMessage,
-                    style: GoogleFonts.jetBrainsMono(fontSize: 12, color: const Color(0xFF00E676)),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text('BT MONITOR', style: TextStyle(color: Colors.white.withOpacity(0.3), fontSize: 8, fontWeight: FontWeight.bold)),
+                      Text('BYTES: ${state.totalBytesReceived}', style: TextStyle(color: accentColor, fontSize: 8, fontWeight: FontWeight.bold)),
+                    ],
                   ),
+                  const SizedBox(height: 12),
+                  Text('LAST STRING:', style: TextStyle(color: Colors.white.withOpacity(0.2), fontSize: 7)),
+                  Text(
+                    state.lastRawMessage.isEmpty ? 'Waiting...' : state.lastRawMessage,
+                    style: GoogleFonts.jetBrainsMono(fontSize: 11, color: const Color(0xFF00E676)),
+                  ),
+                  const SizedBox(height: 12),
+                  Text('RAW HEX (LATEST):', style: TextStyle(color: Colors.white.withOpacity(0.2), fontSize: 7)),
+                  Text(
+                    state.rawHexData.isEmpty ? 'No hex data' : state.rawHexData,
+                    style: GoogleFonts.jetBrainsMono(fontSize: 10, color: Colors.orangeAccent.withOpacity(0.8)),
+                  ),
+                  const SizedBox(height: 16),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: ElevatedButton(
+                          onPressed: () => state.sendMessage("PING\n"),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: Colors.white.withOpacity(0.05),
+                            padding: const EdgeInsets.symmetric(vertical: 8),
+                          ),
+                          child: Text("SEND PING", style: GoogleFonts.jetBrainsMono(fontSize: 10, color: Colors.white)),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: ElevatedButton(
+                          onPressed: () => state.requestManualPermissions(),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: Colors.white.withOpacity(0.05),
+                            padding: const EdgeInsets.symmetric(vertical: 8),
+                          ),
+                          child: Text("FIX PERMS", style: GoogleFonts.jetBrainsMono(fontSize: 10, color: Colors.white)),
+                        ),
+                      ),
+                    ],
+                  )
                 ],
               ),
             ),
