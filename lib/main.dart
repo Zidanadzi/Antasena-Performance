@@ -423,16 +423,19 @@ class AppState extends ChangeNotifier {
             
             _lastRawMessage = msg; // For Debug Console
 
-            // Simple RPM Parsing
+            // Enhanced RPM Parsing
             if (msg.contains('RPM:')) {
               try {
                 final parts = msg.split('RPM:');
                 if (parts.length > 1) {
                   String valStr = parts[1].trim();
-                  // Remove any non-digit characters that might be trailing
-                  valStr = valStr.split(RegExp(r'[^0-9]'))[0];
-                  int? val = int.tryParse(valStr);
-                  if (val != null) updateRpm(val);
+                  // Extract only digits from the start of the string
+                  RegExp digits = RegExp(r'^\d+');
+                  String? match = digits.stringMatch(valStr);
+                  if (match != null) {
+                    int? val = int.tryParse(match);
+                    if (val != null) updateRpm(val);
+                  }
                 }
               } catch (e) {
                 debugPrint("Parse error: $e");
@@ -512,9 +515,16 @@ class AppState extends ChangeNotifier {
 
   void updateRpm(int val) {
     double targetRpm = val * _rpmCalibration;
-    // Exponential Moving Average: new = (old * smoothing) + (target * (1 - smoothing))
-    // If smoothing is 0, it's instant. If 0.9, it's very slow/smooth.
-    _rpm = ((_rpm * _rpmSmoothing) + (targetRpm * (1.0 - _rpmSmoothing))).round();
+    
+    if (_rpmSmoothing >= 1.0) {
+      // OFF means use 100% new data
+      _rpm = targetRpm.round();
+    } else {
+      // Exponential Moving Average
+      // smoothing 0.1 means 10% old, 90% new
+      // smoothing 0.9 means 90% old, 10% new
+      _rpm = ((_rpm * _rpmSmoothing) + (targetRpm * (1.0 - _rpmSmoothing))).round();
+    }
     notifyListeners();
   }
 

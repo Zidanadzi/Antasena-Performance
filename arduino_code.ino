@@ -1,38 +1,32 @@
 #include <EEPROM.h>
 #include <SoftwareSerial.h>
 
-// --- DAFTAR ISI FUNGSI (Untuk Arduinodroid) ---
-void handleRpmInterrupt();
-void loadConfig();
-float calculateMedianRpm();
-int getKillTime(float rpm);
-void handleBluetooth();
-void parseConfig(String data);
+// --- KONFIGURASI PIN BARU ---
+const int qsPin = 2;            // Sensor Shifter (D2)
+const int rpmPin = 3;           // Pulser (D3 - Interrupt)
+const int relayPin = 10;        // Mosfet Relay (D10)
+const int rxPin = 9;            // Bluetooth RX (D9)
+const int txPin = 8;            // Bluetooth TX (D8)
 
-// --- KONFIGURASI PIN ---
-const int qsPin = 2;            
-const int rpmPin = 3;           
-const int relayPin = 10;        
-const int rxPin = 9;            
-const int txPin = 8;            
-
+// Inisialisasi Bluetooth SoftwareSerial
 SoftwareSerial btSerial(rxPin, txPin); 
 
-// --- SIGNAL PROCESSING ---
+// --- SIGNAL PROCESSING (3 SAMPLES MEDIAN) ---
 volatile unsigned long lastMicros = 0;
 volatile unsigned long intervals[3] = {0,0,0}; 
 volatile int intervalIdx = 0;
 unsigned long lastRpmUpdate = 0;
 
-// --- KALMAN ---
+// --- KALMAN FILTER VARIABLES ---
 float rpmFiltered = 0;
 float p_kalman = 1.0;
 float k_gain = 0;
 
+// --- CONFIGURATION STRUCTURE (EEPROM) ---
 struct Config {
   float minRpm;
   int k3k, k6k, k9k, k12k;
-  float rpmDivider;     
+  float rpmDivider;     // Default 11.66
   float shiftRpm;
   bool kalmanOn;
   float q_kalman;
@@ -43,14 +37,18 @@ struct Config {
 Config conf;
 
 void setup() {
+  // Serial Monitor (USB) tetap bisa digunakan untuk debug
   Serial.begin(9600);
+  
+  // Bluetooth HC-05 (D8, D9)
   btSerial.begin(9600); 
   
   pinMode(rpmPin, INPUT_PULLUP);
   pinMode(qsPin, INPUT_PULLUP);
   pinMode(relayPin, OUTPUT);
-  digitalWrite(relayPin, LOW); 
+  digitalWrite(relayPin, LOW); // Normal: Pengapian Nyala
 
+  // Menggunakan Interrupt pada Pin D3 (Interrupt 1)
   attachInterrupt(digitalPinToInterrupt(rpmPin), handleRpmInterrupt, FALLING);
   
   loadConfig();
@@ -62,7 +60,8 @@ void setup() {
 void loop() {
   unsigned long now = millis();
 
-  if (now - lastRpmUpdate >= 30) {
+  // 1. HITUNG & STREAMING RPM (Setiap 40ms)
+  if (now - lastRpmUpdate >= 40) {
     float rawRpm = calculateMedianRpm();
     
     if (conf.kalmanOn) {
@@ -71,7 +70,7 @@ void loop() {
       rpmFiltered = rpmFiltered + k_gain * (rawRpm - rpmFiltered);
       p_kalman = (1 - k_gain) * p_kalman;
     } else {
-      rpmFiltered = rawRpm; 
+      rpmFiltered = rawRpm;
     }
 
     if (micros() - lastMicros > 250000) {
@@ -79,40 +78,49 @@ void loop() {
       for(int i=0; i<3; i++) intervals[i] = 0;
     }
 
+    // Kirim Data ke Bluetooth (Aplikasi HP)
     btSerial.print("RPM:");
     btSerial.println((int)rpmFiltered);
+
+    // Debug ke USB (Serial Monitor)
     Serial.print("RPM:");
     Serial.println((int)rpmFiltered);
 
     if (rpmFiltered >= conf.shiftRpm && conf.shiftRpm > 0) {
       btSerial.println("SHIFT!");
+      Serial.println("SHIFT!");
     }
 
     lastRpmUpdate = now;
   }
 
+  // 2. LOGIKA QUICK SHIFTER (D2 Sensor)
   if (digitalRead(qsPin) == LOW) {
     if (rpmFiltered >= conf.minRpm) {
       int timeToCut = getKillTime(rpmFiltered);
-      digitalWrite(relayPin, HIGH); 
+      
+      digitalWrite(relayPin, HIGH); // Putus Pengapian
       delay(timeToCut);
-      digitalWrite(relayPin, LOW);  
+      digitalWrite(relayPin, LOW);  // Sambung Kembali
+      
       btSerial.print("QS_EVENT:");
       btSerial.println(timeToCut);
-      delay(400); 
+      
+      delay(400); // Debounce
     }
   }
 
+  // 3. TERIMA SETTING DARI BLUETOOTH
   if (btSerial.available() > 0) {
     handleBluetooth();
   }
 }
 
-// --- DEFINISI FUNGSI ---
-
 void handleRpmInterrupt() {
   unsigned long m = micros();
   unsigned long duration = m - lastMicros;
+  
+  // Noise Filter untuk RPM tinggi (14.000 RPM)
   if (duration > 200) {
     intervals[intervalIdx] = duration;
     intervalIdx = (intervalIdx + 1) % 3;
@@ -124,12 +132,14 @@ float calculateMedianRpm() {
   unsigned long sorted[3];
   for (int i = 0; i < 3; i++) sorted[i] = intervals[i];
 
+  // Simple sort for 3 items
   if (sorted[0] > sorted[1]) { unsigned long t = sorted[0]; sorted[0] = sorted[1]; sorted[1] = t; }
   if (sorted[1] > sorted[2]) { unsigned long t = sorted[1]; sorted[1] = sorted[2]; sorted[2] = t; }
   if (sorted[0] > sorted[1]) { unsigned long t = sorted[0]; sorted[0] = sorted[1]; sorted[1] = t; }
 
   unsigned long medianInterval = sorted[1];
   if (medianInterval == 0) return 0;
+
   return (60000000.0 / (float)medianInterval) / conf.rpmDivider;
 }
 
@@ -150,7 +160,7 @@ void handleBluetooth() {
 void parseConfig(String data) {
   int comma[10];
   int found = 0;
-  for (int i = 0; i < (int)data.length() && found < 10; i++) {
+  for (int i = 0; i < data.length() && found < 10; i++) {
     if (data[i] == ',') {
       comma[found] = i;
       found++;
@@ -180,7 +190,7 @@ void loadConfig() {
   if (conf.magicNumber != 777) {
     conf.minRpm = 3000;
     conf.k3k = 70; conf.k6k = 65; conf.k9k = 75; conf.k12k = 80;
-    conf.rpmDivider = 1.15;
+    conf.rpmDivider = 11.66;
     conf.shiftRpm = 11500;
     conf.kalmanOn = false;
     conf.q_kalman = 0.05;
