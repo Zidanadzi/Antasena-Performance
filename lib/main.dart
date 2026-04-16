@@ -78,12 +78,22 @@ class AppState extends ChangeNotifier {
   final List<RaceRecord> _history = [];
   final List<DataPoint> _currentRaceData = [];
   
+  // Advanced Filtering
+  bool _useKalmanFilter = false;
+  double _kalmanQ = 0.1; // Process Noise
+  double _kalmanR = 2.0; // Measurement Noise
+  double _kalmanP = 1.0; // Error Covariance
+  double _kalmanX = 0.0; // Estimated RPM
+  
   // Getters
   int get rpm => _rpm;
   double get speed => _speed;
   double get minRpmActive => _minRpmActive;
   double get rpmCalibration => _rpmCalibration;
   double get rpmSmoothing => _rpmSmoothing;
+  bool get useKalmanFilter => _useKalmanFilter;
+  double get kalmanQ => _kalmanQ;
+  double get kalmanR => _kalmanR;
   List<int> get tableRpm => _tableRpm;
   List<int> get tableKill => _tableKill;
   bool get isConnected => _isConnected;
@@ -165,6 +175,9 @@ class AppState extends ChangeNotifier {
     _minRpmActive = prefs.getDouble('minRpmActive') ?? 3000;
     _rpmCalibration = prefs.getDouble('rpmCalibration') ?? 1.0;
     _rpmSmoothing = prefs.getDouble('rpmSmoothing') ?? 0.3;
+    _useKalmanFilter = prefs.getBool('useKalmanFilter') ?? false;
+    _kalmanQ = prefs.getDouble('kalmanQ') ?? 0.1;
+    _kalmanR = prefs.getDouble('kalmanR') ?? 2.0;
     final savedRpm = prefs.getStringList('tableRpm');
     if (savedRpm != null) _tableRpm = savedRpm.map(int.parse).toList();
     final savedKill = prefs.getStringList('tableKill');
@@ -472,9 +485,38 @@ class AppState extends ChangeNotifier {
 
   void updateRpm(int val) {
     double calibratedVal = val * _rpmCalibration;
-    // Exponential Moving Average (EMA) for smoothing/debounce
-    // new_rpm = (smoothing * new_val) + ((1 - smoothing) * old_rpm)
-    _rpm = ((_rpmSmoothing * calibratedVal) + ((1 - _rpmSmoothing) * _rpm)).round();
+    
+    if (_useKalmanFilter) {
+      // Kalman Filter implementation
+      // Prediction step
+      _kalmanP = _kalmanP + _kalmanQ;
+      
+      // Update step
+      double k = _kalmanP / (_kalmanP + _kalmanR);
+      _kalmanX = _kalmanX + k * (calibratedVal - _kalmanX);
+      _kalmanP = (1 - k) * _kalmanP;
+      
+      _rpm = _kalmanX.round();
+    } else {
+      // Exponential Moving Average (EMA) for smoothing/debounce
+      // new_rpm = (smoothing * new_val) + ((1 - smoothing) * old_rpm)
+      _rpm = ((_rpmSmoothing * calibratedVal) + ((1 - _rpmSmoothing) * _rpm)).round();
+    }
+    notifyListeners();
+  }
+
+  void setUseKalmanFilter(bool val) {
+    _useKalmanFilter = val;
+    notifyListeners();
+  }
+
+  void setKalmanQ(double val) {
+    _kalmanQ = val;
+    notifyListeners();
+  }
+
+  void setKalmanR(double val) {
+    _kalmanR = val;
     notifyListeners();
   }
 
@@ -616,6 +658,9 @@ class AppState extends ChangeNotifier {
     await prefs.setDouble('minRpmActive', _minRpmActive);
     await prefs.setDouble('rpmCalibration', _rpmCalibration);
     await prefs.setDouble('rpmSmoothing', _rpmSmoothing);
+    await prefs.setBool('useKalmanFilter', _useKalmanFilter);
+    await prefs.setDouble('kalmanQ', _kalmanQ);
+    await prefs.setDouble('kalmanR', _kalmanR);
     await prefs.setStringList('tableRpm', _tableRpm.map((e) => e.toString()).toList());
     await prefs.setStringList('tableKill', _tableKill.map((e) => e.toString()).toList());
     
@@ -1412,6 +1457,8 @@ class _TuningPageState extends State<TuningPage> {
             _buildStealthCalibrationSelector(state),
             const SizedBox(height: 16),
             _buildStealthSmoothingSelector(state),
+            const SizedBox(height: 16),
+            _buildAdvancedFilteringSection(state),
             
             const SizedBox(height: 32),
             _buildSectionHeader('KILL TIME MATRIX'),
@@ -1564,6 +1611,94 @@ class _TuningPageState extends State<TuningPage> {
               }).toList(),
             ),
           ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildAdvancedFilteringSection(AppState state) {
+    return Container(
+      decoration: BoxDecoration(
+        color: const Color(0xFF0A0A0A),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: Colors.white.withOpacity(0.08)),
+      ),
+      clipBehavior: Clip.antiAlias,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.symmetric(vertical: 0, horizontal: 20),
+            color: Colors.white.withOpacity(0.03),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                const Text(
+                  'ADVANCED RPM FILTERING', 
+                  style: TextStyle(fontSize: 9, fontWeight: FontWeight.w900, color: Colors.white24, letterSpacing: 1.5)
+                ),
+                Transform.scale(
+                  scale: 0.7,
+                  child: Switch(
+                    value: state.useKalmanFilter,
+                    onChanged: (val) => state.setUseKalmanFilter(val),
+                    activeColor: const Color(0xFF00E676),
+                    activeTrackColor: const Color(0xFF00E676).withOpacity(0.2),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          if (state.useKalmanFilter) ...[
+            Padding(
+              padding: const EdgeInsets.fromLTRB(20, 16, 20, 0),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  const Text('PROCESS NOISE (Q)', style: TextStyle(color: Colors.white38, fontSize: 10, fontWeight: FontWeight.bold)),
+                  Text(state.kalmanQ.toStringAsFixed(2), style: const TextStyle(color: Color(0xFF00E676), fontSize: 10, fontWeight: FontWeight.bold)),
+                ],
+              ),
+            ),
+            Slider(
+              value: state.kalmanQ,
+              min: 0.01,
+              max: 1.0,
+              divisions: 99,
+              activeColor: const Color(0xFF00E676),
+              inactiveColor: Colors.white.withOpacity(0.05),
+              onChanged: (val) => state.setKalmanQ(val),
+            ),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(20, 0, 20, 0),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  const Text('MEASUREMENT NOISE (R)', style: TextStyle(color: Colors.white38, fontSize: 10, fontWeight: FontWeight.bold)),
+                  Text(state.kalmanR.toStringAsFixed(1), style: const TextStyle(color: Color(0xFF00E676), fontSize: 10, fontWeight: FontWeight.bold)),
+                ],
+              ),
+            ),
+            Slider(
+              value: state.kalmanR,
+              min: 0.1,
+              max: 10.0,
+              divisions: 99,
+              activeColor: const Color(0xFF00E676),
+              inactiveColor: Colors.white.withOpacity(0.05),
+              onChanged: (val) => state.setKalmanR(val),
+            ),
+            const SizedBox(height: 10),
+          ] else ...[
+            Padding(
+              padding: const EdgeInsets.all(20),
+              child: Text(
+                'Kalman filtering provides smoother RPM readings by predicting engine rotation and filtering out sensor noise. Enable for high-performance tuning.',
+                style: TextStyle(color: Colors.white.withOpacity(0.2), fontSize: 10, height: 1.5),
+              ),
+            ),
+          ]
         ],
       ),
     );
