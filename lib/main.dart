@@ -39,10 +39,11 @@ class AppState extends ChangeNotifier {
   
   // Settings
   double _minRpmActive = 3000;
-  double _rpmCalibration = 1.0;
-  double _rpmSmoothing = 0.3; // 1.0 = no smoothing, 0.1 = heavy smoothing
+  double _rpmCalibration = 11.66; // Updated to match MX King default
+  double _rpmSmoothing = 0.3; 
+  double _shiftRpm = 11500; // New setting
   List<int> _tableRpm = [3000, 6000, 9000, 12000];
-  List<int> _tableKill = [95, 85, 75, 65];
+  List<int> _tableKill = [70, 65, 75, 80]; // Updated defaults
   
   // Connection
   bool _isConnected = false;
@@ -91,6 +92,7 @@ class AppState extends ChangeNotifier {
   double get minRpmActive => _minRpmActive;
   double get rpmCalibration => _rpmCalibration;
   double get rpmSmoothing => _rpmSmoothing;
+  double get shiftRpm => _shiftRpm; // New getter
   bool get useKalmanFilter => _useKalmanFilter;
   double get kalmanQ => _kalmanQ;
   double get kalmanR => _kalmanR;
@@ -173,11 +175,12 @@ class AppState extends ChangeNotifier {
   Future<void> _loadSettings() async {
     final prefs = await SharedPreferences.getInstance();
     _minRpmActive = prefs.getDouble('minRpmActive') ?? 3000;
-    _rpmCalibration = prefs.getDouble('rpmCalibration') ?? 1.0;
+    _rpmCalibration = prefs.getDouble('rpmCalibration') ?? 11.66;
     _rpmSmoothing = prefs.getDouble('rpmSmoothing') ?? 0.3;
-    _useKalmanFilter = prefs.getBool('useKalmanFilter') ?? false;
-    _kalmanQ = prefs.getDouble('kalmanQ') ?? 0.1;
-    _kalmanR = prefs.getDouble('kalmanR') ?? 2.0;
+    _shiftRpm = prefs.getDouble('shiftRpm') ?? 11500;
+    _useKalmanFilter = prefs.getBool('useKalmanFilter') ?? true;
+    _kalmanQ = prefs.getDouble('kalmanQ') ?? 0.05;
+    _kalmanR = prefs.getDouble('kalmanR') ?? 20.0;
     final savedRpm = prefs.getStringList('tableRpm');
     if (savedRpm != null) _tableRpm = savedRpm.map(int.parse).toList();
     final savedKill = prefs.getStringList('tableKill');
@@ -413,7 +416,11 @@ class AppState extends ChangeNotifier {
           }
 
           // Detect Quick Shifter signal
-          if (msg.contains('QS:ACTIVE')) {
+          if (msg.contains('QS_EVENT:')) {
+            triggerShiftNotification();
+          }
+
+          if (msg.contains('SHIFT!')) {
             triggerShiftNotification();
           }
           
@@ -527,6 +534,11 @@ class AppState extends ChangeNotifier {
 
   void setRpmCalibration(double val) {
     _rpmCalibration = val;
+    notifyListeners();
+  }
+
+  void setShiftRpm(double val) {
+    _shiftRpm = val;
     notifyListeners();
   }
 
@@ -658,6 +670,7 @@ class AppState extends ChangeNotifier {
     await prefs.setDouble('minRpmActive', _minRpmActive);
     await prefs.setDouble('rpmCalibration', _rpmCalibration);
     await prefs.setDouble('rpmSmoothing', _rpmSmoothing);
+    await prefs.setDouble('shiftRpm', _shiftRpm);
     await prefs.setBool('useKalmanFilter', _useKalmanFilter);
     await prefs.setDouble('kalmanQ', _kalmanQ);
     await prefs.setDouble('kalmanR', _kalmanR);
@@ -670,12 +683,8 @@ class AppState extends ChangeNotifier {
     // Write to Bluetooth Module if connected
     if (_isConnected && _classicConnection != null) {
       try {
-        // Simple protocol: S[MIN_RPM],[CALIB],[RPM1],[KILL1],...[RPM4],[KILL4]\n
-        String config = "S${_minRpmActive.round()},${_rpmCalibration.toStringAsFixed(1)}";
-        for (int i = 0; i < _tableRpm.length; i++) {
-          config += ",${_tableRpm[i]},${_tableKill[i]}";
-        }
-        config += "\n";
+        // New protocol: SET_ALL:minRpm,k3k,k6k,k9k,k12k,divider,shiftRpm,kalmanOn,q,r
+        String config = "SET_ALL:${_minRpmActive.round()},${_tableKill[0]},${_tableKill[1]},${_tableKill[2]},${_tableKill[3]},${_rpmCalibration.toStringAsFixed(2)},${_shiftRpm.round()},${_useKalmanFilter ? 1 : 0},${_kalmanQ.toStringAsFixed(4)},${_kalmanR.toStringAsFixed(2)}\n";
         
         _classicConnection!.output.add(Uint8List.fromList(config.codeUnits));
         await _classicConnection!.output.allSent;
@@ -871,7 +880,7 @@ class DashboardPage extends StatelessWidget {
     const Color accentColor = Color(0xFF00E676);
     
     // Shift Light Logic: Flash screen if RPM is high
-    bool isShiftPoint = state.rpm > 12000;
+    bool isShiftPoint = state.rpm >= state.shiftRpm;
 
     return Scaffold(
       backgroundColor: isShiftPoint ? accentColor : const Color(0xFF0F0F0F),
@@ -1454,7 +1463,22 @@ class _TuningPageState extends State<TuningPage> {
               child: _buildStealthTuningCard('MINIMUM RPM', state.minRpmActive.round().toString(), 'RPM'),
             ),
             const SizedBox(height: 16),
-            _buildStealthCalibrationSelector(state),
+            GestureDetector(
+              onTap: () => _showEditDialog(context, 'RPM DIVIDER', state.rpmCalibration.toString(), (val) {
+                state.setRpmCalibration(double.tryParse(val) ?? 11.66);
+              }),
+              child: _buildStealthTuningCard('RPM DIVIDER (CALIBRATION)', state.rpmCalibration.toString(), 'DIV'),
+            ),
+            const SizedBox(height: 16),
+            GestureDetector(
+              onTap: () => _showEditDialog(context, 'SHIFT LIGHT RPM', state.shiftRpm.round().toString(), (val) {
+                // We need to add a setShiftRpm method to AppState
+                // For now I'll use a direct assignment if I can or add the method
+                // I'll add the method in the next chunk
+                state.setShiftRpm(double.tryParse(val) ?? 11500);
+              }),
+              child: _buildStealthTuningCard('SHIFT LIGHT RPM', state.shiftRpm.round().toString(), 'RPM'),
+            ),
             const SizedBox(height: 16),
             _buildStealthSmoothingSelector(state),
             const SizedBox(height: 16),
@@ -1550,72 +1574,6 @@ class _TuningPageState extends State<TuningPage> {
     );
   }
 
-  Widget _buildStealthCalibrationSelector(AppState state) {
-    return Container(
-      decoration: BoxDecoration(
-        color: const Color(0xFF0A0A0A),
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: Colors.white.withOpacity(0.08)),
-      ),
-      clipBehavior: Clip.antiAlias,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Container(
-            width: double.infinity,
-            padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 20),
-            color: Colors.white.withOpacity(0.03),
-            child: const Text(
-              'RPM CALIBRATION', 
-              style: TextStyle(fontSize: 9, fontWeight: FontWeight.w900, color: Colors.white24, letterSpacing: 1.5)
-            ),
-          ),
-          Padding(
-            padding: const EdgeInsets.all(12),
-            child: GridView.count(
-              shrinkWrap: true,
-              physics: const NeverScrollableScrollPhysics(),
-              crossAxisCount: 4,
-              mainAxisSpacing: 8,
-              crossAxisSpacing: 8,
-              childAspectRatio: 1.8,
-              children: [
-                0.5, 0.6, 0.7, 0.8, 0.85, 0.9, 0.95, 1.0, 
-                1.05, 1.1, 1.15, 1.2, 1.25, 1.3, 1.4, 1.5
-              ].map((v) {
-                bool selected = state.rpmCalibration == v;
-                return GestureDetector(
-                  onTap: () => state.setRpmCalibration(v),
-                  child: AnimatedContainer(
-                    duration: const Duration(milliseconds: 200),
-                    curve: Curves.easeOutCubic,
-                    alignment: Alignment.center,
-                    decoration: BoxDecoration(
-                      color: selected ? const Color(0xFF00E676) : Colors.white.withOpacity(0.02),
-                      borderRadius: BorderRadius.circular(4),
-                      border: Border.all(
-                        color: selected ? const Color(0xFF00E676) : Colors.white.withOpacity(0.05),
-                        width: 1,
-                      ),
-                    ),
-                    child: Text(
-                      '${v}x', 
-                      style: TextStyle(
-                        color: selected ? Colors.black : Colors.white.withOpacity(0.4), 
-                        fontWeight: selected ? FontWeight.w900 : FontWeight.bold, 
-                        fontSize: 10,
-                      )
-                    ),
-                  ),
-                );
-              }).toList(),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
   Widget _buildAdvancedFilteringSection(AppState state) {
     return Container(
       decoration: BoxDecoration(
@@ -1663,9 +1621,9 @@ class _TuningPageState extends State<TuningPage> {
             ),
             Slider(
               value: state.kalmanQ,
-              min: 0.01,
-              max: 1.0,
-              divisions: 99,
+              min: 0.001,
+              max: 0.5,
+              divisions: 100,
               activeColor: const Color(0xFF00E676),
               inactiveColor: Colors.white.withOpacity(0.05),
               onChanged: (val) => state.setKalmanQ(val),
@@ -1682,8 +1640,8 @@ class _TuningPageState extends State<TuningPage> {
             ),
             Slider(
               value: state.kalmanR,
-              min: 0.1,
-              max: 10.0,
+              min: 1.0,
+              max: 100.0,
               divisions: 99,
               activeColor: const Color(0xFF00E676),
               inactiveColor: Colors.white.withOpacity(0.05),

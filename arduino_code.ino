@@ -1,159 +1,198 @@
-/*
- * ANTASENA PERFORMANCE - UNIVERSAL ARDUINO CODE
- * Compatible with:
- * 1. Antasena Web Dashboard (HM-10 / BLE)
- * 2. Serial Bluetooth Terminal (HC-05 / Classic)
- * 
- * Hardware: Arduino Nano, Relay Sanyi 80A, Optocoupler, Proximity Sensor
- */
-
+#include <EEPROM.h>
 #include <SoftwareSerial.h>
 
-// --- 1. FUNCTION PROTOTYPES ---
-void processCommand(String cmd);
-void executeQuickShift();
-void rpmInterrupt();
-void sensorInterrupt();
+// --- KONFIGURASI PIN BARU ---
+const int qsPin = 2;            // Sensor Shifter (D2)
+const int rpmPin = 3;           // Pulser (D3 - Interrupt)
+const int relayPin = 10;        // Mosfet Relay (D10)
+const int rxPin = 9;            // Bluetooth RX (D9)
+const int txPin = 8;            // Bluetooth TX (D8)
 
-// --- 2. PIN CONFIGURATION ---
-#define BT_RX 8
-#define BT_TX 9
-#define SENSOR_PIN 2
-#define RPM_PIN 3    
-#define RELAY_PIN 10 
-#define LED_PIN 13   
+// Inisialisasi Bluetooth SoftwareSerial
+SoftwareSerial btSerial(rxPin, txPin); 
 
-SoftwareSerial ble(BT_RX, BT_TX);
+// --- SIGNAL PROCESSING (9 SAMPLES MEDIAN) ---
+volatile unsigned long lastMicros = 0;
+volatile unsigned long intervals[9] = {0,0,0,0,0,0,0,0,0}; 
+volatile int intervalIdx = 0;
+unsigned long lastRpmUpdate = 0;
 
-// --- 3. CONTROL VARIABLES ---
-volatile unsigned long lastRpmMicros = 0;
-volatile float currentRpm = 0;
-volatile bool shiftRequested = false;
-unsigned long lastTelemetriTime = 0;
-unsigned long lastShiftTime = 0;
-const int shiftLockout = 500; 
+// --- KALMAN FILTER VARIABLES ---
+float rpmFiltered = 0;
+float p_kalman = 1.0;
+float k_gain = 0;
 
-// RPM Filtering
-const int numReadings = 5;
-float readings[numReadings];
-int readIndex = 0;
-float total = 0;
+// --- CONFIGURATION STRUCTURE (EEPROM) ---
+struct Config {
+  float minRpm;
+  int k3k, k6k, k9k, k12k;
+  float rpmDivider;     // Default 11.66
+  float shiftRpm;
+  bool kalmanOn;
+  float q_kalman;
+  float r_kalman;
+  int magicNumber;
+};
 
-// 4-Table Performance Settings
-int tableRpm[4]  = {4000, 6000, 8000, 10000}; 
-int tableKill[4] = {95, 85, 75, 65}; 
+Config conf;
 
 void setup() {
-  // Use 9600 for HC-05 / HM-10 default
-  ble.begin(9600); 
+  // Serial Monitor (USB) tetap bisa digunakan untuk debug
+  Serial.begin(9600);
   
-  pinMode(RELAY_PIN, OUTPUT);
-  digitalWrite(RELAY_PIN, LOW);
-  pinMode(LED_PIN, OUTPUT);
+  // Bluetooth HC-05 (D8, D9)
+  btSerial.begin(9600); 
   
-  pinMode(SENSOR_PIN, INPUT_PULLUP);
-  attachInterrupt(digitalPinToInterrupt(SENSOR_PIN), sensorInterrupt, FALLING);
-  
-  pinMode(RPM_PIN, INPUT_PULLUP); 
-  attachInterrupt(digitalPinToInterrupt(RPM_PIN), rpmInterrupt, FALLING);
+  pinMode(rpmPin, INPUT_PULLUP);
+  pinMode(qsPin, INPUT_PULLUP);
+  pinMode(relayPin, OUTPUT);
+  digitalWrite(relayPin, LOW); // Normal: Pengapian Nyala
 
-  for (int i = 0; i < numReadings; i++) readings[i] = 0;
+  // Menggunakan Interrupt pada Pin D3 (Interrupt 1)
+  attachInterrupt(digitalPinToInterrupt(rpmPin), handleRpmInterrupt, FALLING);
+  
+  loadConfig();
 }
 
 void loop() {
-  // A. RECEIVE COMMANDS (Format: T1R4000, T1K95, etc.)
-  if (ble.available() > 0) {
-    String command = ble.readStringUntil('\n');
-    command.trim();
-    if (command.length() > 0) {
-      processCommand(command);
-      // Visual feedback for command received
-      digitalWrite(LED_PIN, HIGH); delay(50); digitalWrite(LED_PIN, LOW);
-    }
-  }
+  unsigned long now = millis();
 
-  // B. QUICKSHIFT LOGIC
-  if (shiftRequested) {
-    if (millis() - lastShiftTime > shiftLockout) {
-      executeQuickShift();
-      lastShiftTime = millis();
-    }
-    shiftRequested = false;
-  }
-
-  // C. SEND TELEMETRY (Format: RPM,KillTime,MinRPM)
-  if (millis() - lastTelemetriTime > 150) {
-    // This format is compatible with the Web Dashboard
-    ble.print((int)currentRpm);
-    ble.print(",");
-    ble.print(tableKill[0]); 
-    ble.print(",");
-    ble.println(tableRpm[0]); 
-
-    lastTelemetriTime = millis();
+  // 1. HITUNG & STREAMING RPM (Setiap 50ms)
+  if (now - lastRpmUpdate >= 50) {
+    float rawRpm = calculateMedianRpm();
     
-    // Reset RPM if no pulses for 0.5s
-    if (micros() - lastRpmMicros > 500000) currentRpm = 0;
+    if (conf.kalmanOn) {
+      p_kalman = p_kalman + conf.q_kalman;
+      k_gain = p_kalman / (p_kalman + conf.r_kalman);
+      rpmFiltered = rpmFiltered + k_gain * (rawRpm - rpmFiltered);
+      p_kalman = (1 - k_gain) * p_kalman;
+    } else {
+      rpmFiltered = rawRpm;
+    }
+
+    if (micros() - lastMicros > 250000) {
+      rpmFiltered = 0;
+      for(int i=0; i<9; i++) intervals[i] = 0;
+    }
+
+    // Kirim Data ke Bluetooth (Aplikasi HP)
+    btSerial.print("RPM:");
+    btSerial.println((int)rpmFiltered);
+
+    if (rpmFiltered >= conf.shiftRpm && conf.shiftRpm > 0) {
+      btSerial.println("SHIFT!");
+    }
+
+    lastRpmUpdate = now;
   }
 
-  // D. DIAGNOSTIC LED
-  if (currentRpm > 500) {
-    digitalWrite(LED_PIN, (millis() / 100) % 2); 
-  } else {
-    digitalWrite(LED_PIN, LOW);
-  }
-}
-
-void executeQuickShift() {
-  int activeKillTime = 0;
-
-  // Select Kill Time based on current RPM
-  if (currentRpm >= tableRpm[3])      activeKillTime = tableKill[3];
-  else if (currentRpm >= tableRpm[2]) activeKillTime = tableKill[2];
-  else if (currentRpm >= tableRpm[1]) activeKillTime = tableKill[1];
-  else if (currentRpm >= tableRpm[0]) activeKillTime = tableKill[0];
-
-  if (activeKillTime > 0) {
-    digitalWrite(RELAY_PIN, HIGH); // Cut Ignition
-    delay(activeKillTime);
-    digitalWrite(RELAY_PIN, LOW);  // Restore Ignition
-  }
-}
-
-void processCommand(String cmd) {
-  int tableIdx = -1;
-  if (cmd.startsWith("T1")) tableIdx = 0;
-  else if (cmd.startsWith("T2")) tableIdx = 1;
-  else if (cmd.startsWith("T3")) tableIdx = 2;
-  else if (cmd.startsWith("T4")) tableIdx = 3;
-
-  if (tableIdx != -1) {
-    if (cmd.indexOf("R") > 0) {
-      tableRpm[tableIdx] = cmd.substring(cmd.indexOf("R") + 1).toInt();
-    } else if (cmd.indexOf("K") > 0) {
-      tableKill[tableIdx] = cmd.substring(cmd.indexOf("K") + 1).toInt();
+  // 2. LOGIKA QUICK SHIFTER (D2 Sensor)
+  if (digitalRead(qsPin) == LOW) {
+    if (rpmFiltered >= conf.minRpm) {
+      int timeToCut = getKillTime(rpmFiltered);
+      
+      digitalWrite(relayPin, HIGH); // Putus Pengapian
+      delay(timeToCut);
+      digitalWrite(relayPin, LOW);  // Sambung Kembali
+      
+      btSerial.print("QS_EVENT:");
+      btSerial.println(timeToCut);
+      
+      delay(400); // Debounce
     }
   }
+
+  // 3. TERIMA SETTING DARI BLUETOOTH
+  if (btSerial.available() > 0) {
+    handleBluetooth();
+  }
 }
 
-void rpmInterrupt() {
-  unsigned long currentMicros = micros();
-  unsigned long duration = currentMicros - lastRpmMicros;
+void handleRpmInterrupt() {
+  unsigned long m = micros();
+  unsigned long duration = m - lastMicros;
   
-  if (duration > 4000) { // Noise Filter
-    float rawRpm = 60000000.0 / duration;
-    
-    // Moving Average Filter
-    total = total - readings[readIndex];
-    readings[readIndex] = rawRpm;
-    total = total + readings[readIndex];
-    readIndex = (readIndex + 1) % numReadings;
-    
-    currentRpm = total / numReadings;
-    lastRpmMicros = currentMicros;
+  // Noise Filter untuk RPM tinggi (14.000 RPM)
+  if (duration > 200) {
+    intervals[intervalIdx] = duration;
+    intervalIdx = (intervalIdx + 1) % 9;
+    lastMicros = m;
   }
 }
 
-void sensorInterrupt() {
-  if (currentRpm > tableRpm[0]) shiftRequested = true;
+float calculateMedianRpm() {
+  unsigned long sorted[9];
+  for (int i = 0; i < 9; i++) sorted[i] = intervals[i];
+
+  for (int i = 0; i < 8; i++) {
+    for (int j = i + 1; j < 9; j++) {
+      if (sorted[i] > sorted[j]) {
+        unsigned long temp = sorted[i];
+        sorted[i] = sorted[j];
+        sorted[j] = temp;
+      }
+    }
+  }
+
+  unsigned long medianInterval = sorted[4];
+  if (medianInterval == 0) return 0;
+
+  return (60000000.0 / (float)medianInterval) / conf.rpmDivider;
+}
+
+int getKillTime(float rpm) {
+  if (rpm < 6000) return conf.k3k;
+  if (rpm < 9000) return conf.k6k;
+  if (rpm < 11500) return conf.k9k;
+  return conf.k12k;
+}
+
+void handleBluetooth() {
+  String cmd = btSerial.readStringUntil('\n');
+  if (cmd.startsWith("SET_ALL:")) {
+    parseConfig(cmd.substring(8));
+  }
+}
+
+void parseConfig(String data) {
+  int comma[10];
+  int found = 0;
+  for (int i = 0; i < data.length() && found < 10; i++) {
+    if (data[i] == ',') {
+      comma[found] = i;
+      found++;
+    }
+  }
+
+  if (found >= 9) {
+    conf.minRpm = data.substring(0, comma[0]).toFloat();
+    conf.k3k = data.substring(comma[0]+1, comma[1]).toInt();
+    conf.k6k = data.substring(comma[1]+1, comma[2]).toInt();
+    conf.k9k = data.substring(comma[2]+1, comma[3]).toInt();
+    conf.k12k = data.substring(comma[3]+1, comma[4]).toInt();
+    conf.rpmDivider = data.substring(comma[4]+1, comma[5]).toFloat();
+    conf.shiftRpm = data.substring(comma[5]+1, comma[6]).toFloat();
+    conf.kalmanOn = data.substring(comma[6]+1, comma[7]).toInt();
+    conf.q_kalman = data.substring(comma[7]+1, comma[8]).toFloat();
+    conf.r_kalman = data.substring(comma[8]+1).toFloat();
+    
+    conf.magicNumber = 777;
+    EEPROM.put(0, conf);
+    btSerial.println("SUCCESS_SAVE");
+  }
+}
+
+void loadConfig() {
+  EEPROM.get(0, conf);
+  if (conf.magicNumber != 777) {
+    conf.minRpm = 3000;
+    conf.k3k = 70; conf.k6k = 65; conf.k9k = 75; conf.k12k = 80;
+    conf.rpmDivider = 11.66;
+    conf.shiftRpm = 11500;
+    conf.kalmanOn = true;
+    conf.q_kalman = 0.05;
+    conf.r_kalman = 20.0;
+    conf.magicNumber = 777;
+    EEPROM.put(0, conf);
+  }
 }

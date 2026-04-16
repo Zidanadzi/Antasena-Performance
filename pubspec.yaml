@@ -17,6 +17,8 @@ dependencies:
   cupertino_icons: ^1.0.6
   flutter_bluetooth_serial: ^0.4.0
   bluetooth_classic: any
+  syncfusion_flutter_gauges: ^20.1.47
+  vibration: ^1.7.5
 
 dev_dependencies:
   flutter_test:
