@@ -426,13 +426,12 @@ class AppState extends ChangeNotifier {
             // Simpler & Faster RPM Parsing
             if (msg.contains('RPM:')) {
               try {
-                final parts = msg.split('RPM:');
-                if (parts.length > 1) {
-                  String valStr = parts[1].trim();
-                  // Ambil angka saja
-                  String digitsOnly = valStr.replaceAll(RegExp(r'[^0-9]'), '');
-                  if (digitsOnly.isNotEmpty) {
-                    int? val = int.tryParse(digitsOnly);
+                final RegExp digitRegex = RegExp(r'RPM:(\d+)');
+                final match = digitRegex.firstMatch(msg);
+                if (match != null) {
+                  String? valStr = match.group(1);
+                  if (valStr != null) {
+                    int? val = int.tryParse(valStr);
                     if (val != null) updateRpm(val);
                   }
                 }
@@ -1504,8 +1503,6 @@ class _TuningPageState extends State<TuningPage> {
             ),
             const SizedBox(height: 16),
             _buildStealthSmoothingSelector(state),
-            const SizedBox(height: 16),
-            _buildAdvancedFilteringSection(state),
             
             const SizedBox(height: 32),
             _buildSectionHeader('DEBUG CONSOLE'),
@@ -1655,94 +1652,6 @@ class _TuningPageState extends State<TuningPage> {
             ),
             child: const Icon(Icons.tune, size: 20, color: Color(0xFF00E676)),
           ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildAdvancedFilteringSection(AppState state) {
-    return Container(
-      decoration: BoxDecoration(
-        color: const Color(0xFF0A0A0A),
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: Colors.white.withOpacity(0.08)),
-      ),
-      clipBehavior: Clip.antiAlias,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Container(
-            width: double.infinity,
-            padding: const EdgeInsets.symmetric(vertical: 0, horizontal: 20),
-            color: Colors.white.withOpacity(0.03),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                const Text(
-                  'ADVANCED RPM FILTERING', 
-                  style: TextStyle(fontSize: 9, fontWeight: FontWeight.w900, color: Colors.white24, letterSpacing: 1.5)
-                ),
-                Transform.scale(
-                  scale: 0.7,
-                  child: Switch(
-                    value: state.useKalmanFilter,
-                    onChanged: (val) => state.setUseKalmanFilter(val),
-                    activeColor: const Color(0xFF00E676),
-                    activeTrackColor: const Color(0xFF00E676).withOpacity(0.2),
-                  ),
-                ),
-              ],
-            ),
-          ),
-          if (state.useKalmanFilter) ...[
-            Padding(
-              padding: const EdgeInsets.fromLTRB(20, 16, 20, 0),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  const Text('PROCESS NOISE (Q)', style: TextStyle(color: Colors.white38, fontSize: 10, fontWeight: FontWeight.bold)),
-                  Text(state.kalmanQ.toStringAsFixed(2), style: const TextStyle(color: Color(0xFF00E676), fontSize: 10, fontWeight: FontWeight.bold)),
-                ],
-              ),
-            ),
-            Slider(
-              value: state.kalmanQ,
-              min: 0.001,
-              max: 0.5,
-              divisions: 100,
-              activeColor: const Color(0xFF00E676),
-              inactiveColor: Colors.white.withOpacity(0.05),
-              onChanged: (val) => state.setKalmanQ(val),
-            ),
-            Padding(
-              padding: const EdgeInsets.fromLTRB(20, 0, 20, 0),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  const Text('MEASUREMENT NOISE (R)', style: TextStyle(color: Colors.white38, fontSize: 10, fontWeight: FontWeight.bold)),
-                  Text(state.kalmanR.toStringAsFixed(1), style: const TextStyle(color: Color(0xFF00E676), fontSize: 10, fontWeight: FontWeight.bold)),
-                ],
-              ),
-            ),
-            Slider(
-              value: state.kalmanR,
-              min: 1.0,
-              max: 100.0,
-              divisions: 99,
-              activeColor: const Color(0xFF00E676),
-              inactiveColor: Colors.white.withOpacity(0.05),
-              onChanged: (val) => state.setKalmanR(val),
-            ),
-            const SizedBox(height: 10),
-          ] else ...[
-            Padding(
-              padding: const EdgeInsets.all(20),
-              child: Text(
-                'Kalman filtering provides smoother RPM readings by predicting engine rotation and filtering out sensor noise. Enable for high-performance tuning.',
-                style: TextStyle(color: Colors.white.withOpacity(0.2), fontSize: 10, height: 1.5),
-              ),
-            ),
-          ]
         ],
       ),
     );
