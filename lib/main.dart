@@ -40,6 +40,7 @@ class AppState extends ChangeNotifier {
   // Settings
   double _minRpmActive = 3000;
   double _rpmCalibration = 1.0;
+  double _rpmSmoothing = 0.3; // 1.0 = no smoothing, 0.1 = heavy smoothing
   List<int> _tableRpm = [3000, 6000, 9000, 12000];
   List<int> _tableKill = [95, 85, 75, 65];
   
@@ -69,6 +70,10 @@ class AppState extends ChangeNotifier {
   // GPS Data
   double _gpsAccuracy = 0;
   
+  // Shift Notification
+  bool _isShiftActive = false;
+  Timer? _shiftNotifyTimer;
+  
   // Race History & Real-time Data
   final List<RaceRecord> _history = [];
   final List<DataPoint> _currentRaceData = [];
@@ -78,6 +83,7 @@ class AppState extends ChangeNotifier {
   double get speed => _speed;
   double get minRpmActive => _minRpmActive;
   double get rpmCalibration => _rpmCalibration;
+  double get rpmSmoothing => _rpmSmoothing;
   List<int> get tableRpm => _tableRpm;
   List<int> get tableKill => _tableKill;
   bool get isConnected => _isConnected;
@@ -93,6 +99,7 @@ class AppState extends ChangeNotifier {
   double? get twoHundredMeter => _twoHundredMeter;
   double? get fourHundredMeter => _fourHundredMeter;
   double get gpsAccuracy => _gpsAccuracy;
+  bool get isShiftActive => _isShiftActive;
   List<RaceRecord> get history => _history;
   List<DataPoint> get currentRaceData => _currentRaceData;
 
@@ -157,6 +164,7 @@ class AppState extends ChangeNotifier {
     final prefs = await SharedPreferences.getInstance();
     _minRpmActive = prefs.getDouble('minRpmActive') ?? 3000;
     _rpmCalibration = prefs.getDouble('rpmCalibration') ?? 1.0;
+    _rpmSmoothing = prefs.getDouble('rpmSmoothing') ?? 0.3;
     final savedRpm = prefs.getStringList('tableRpm');
     if (savedRpm != null) _tableRpm = savedRpm.map(int.parse).toList();
     final savedKill = prefs.getStringList('tableKill');
@@ -390,6 +398,11 @@ class AppState extends ChangeNotifier {
             int? val = int.tryParse(rpmMatch.group(1)!);
             if (val != null) updateRpm(val);
           }
+
+          // Detect Quick Shifter signal
+          if (msg.contains('QS:ACTIVE')) {
+            triggerShiftNotification();
+          }
           
           notifyListeners();
         }
@@ -458,7 +471,15 @@ class AppState extends ChangeNotifier {
   }
 
   void updateRpm(int val) {
-    _rpm = (val * _rpmCalibration).round();
+    double calibratedVal = val * _rpmCalibration;
+    // Exponential Moving Average (EMA) for smoothing/debounce
+    // new_rpm = (smoothing * new_val) + ((1 - smoothing) * old_rpm)
+    _rpm = ((_rpmSmoothing * calibratedVal) + ((1 - _rpmSmoothing) * _rpm)).round();
+    notifyListeners();
+  }
+
+  void setRpmSmoothing(double val) {
+    _rpmSmoothing = val;
     notifyListeners();
   }
 
@@ -556,6 +577,16 @@ class AppState extends ChangeNotifier {
     notifyListeners();
   }
 
+  void triggerShiftNotification() {
+    _isShiftActive = true;
+    _shiftNotifyTimer?.cancel();
+    _shiftNotifyTimer = Timer(const Duration(milliseconds: 500), () {
+      _isShiftActive = false;
+      notifyListeners();
+    });
+    notifyListeners();
+  }
+
   void _initGps() async {
     try {
       LocationPermission permission = await Geolocator.checkPermission();
@@ -584,6 +615,7 @@ class AppState extends ChangeNotifier {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setDouble('minRpmActive', _minRpmActive);
     await prefs.setDouble('rpmCalibration', _rpmCalibration);
+    await prefs.setDouble('rpmSmoothing', _rpmSmoothing);
     await prefs.setStringList('tableRpm', _tableRpm.map((e) => e.toString()).toList());
     await prefs.setStringList('tableKill', _tableKill.map((e) => e.toString()).toList());
     
@@ -798,14 +830,16 @@ class DashboardPage extends StatelessWidget {
 
     return Scaffold(
       backgroundColor: isShiftPoint ? accentColor : const Color(0xFF0F0F0F),
-      body: SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 24.0, vertical: 16.0),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              // HEADER & STATUS
-              Row(
+      body: Stack(
+        children: [
+          SafeArea(
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 24.0, vertical: 16.0),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // HEADER & STATUS
+                  Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
                   Column(
@@ -922,7 +956,43 @@ class DashboardPage extends StatelessWidget {
           ),
         ),
       ),
-    );
+      
+      // QUICK SHIFTER NOTIFICATION OVERLAY
+      if (state.isShiftActive)
+        Positioned.fill(
+          child: Container(
+            color: accentColor.withOpacity(0.8),
+            child: Center(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    "SHIFT!",
+                    style: GoogleFonts.exo2(
+                      fontSize: 80,
+                      fontWeight: FontWeight.w900,
+                      fontStyle: FontStyle.italic,
+                      color: Colors.black,
+                      letterSpacing: 10,
+                    ),
+                  ),
+                  Text(
+                    "QUICK SHIFTER ACTIVE",
+                    style: GoogleFonts.jetBrainsMono(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w900,
+                      color: Colors.black.withOpacity(0.6),
+                      letterSpacing: 4,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+    ],
+  ),
+);
   }
 
   Widget _buildCompactStatItem(String label, String value, String unit, bool isShiftPoint, Color accentColor) {
@@ -1340,6 +1410,8 @@ class _TuningPageState extends State<TuningPage> {
             ),
             const SizedBox(height: 16),
             _buildStealthCalibrationSelector(state),
+            const SizedBox(height: 16),
+            _buildStealthSmoothingSelector(state),
             
             const SizedBox(height: 32),
             _buildSectionHeader('KILL TIME MATRIX'),
@@ -1490,6 +1562,86 @@ class _TuningPageState extends State<TuningPage> {
                   ),
                 );
               }).toList(),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildStealthSmoothingSelector(AppState state) {
+    return Container(
+      decoration: BoxDecoration(
+        color: const Color(0xFF0A0A0A),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: Colors.white.withOpacity(0.08)),
+      ),
+      clipBehavior: Clip.antiAlias,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 20),
+            color: Colors.white.withOpacity(0.03),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                const Text(
+                  'RPM SMOOTHING (DEBOUNCE)', 
+                  style: TextStyle(fontSize: 9, fontWeight: FontWeight.w900, color: Colors.white24, letterSpacing: 1.5)
+                ),
+                Text(
+                  state.rpmSmoothing == 1.0 ? 'OFF' : '${(state.rpmSmoothing * 100).round()}%',
+                  style: const TextStyle(fontSize: 9, fontWeight: FontWeight.bold, color: Color(0xFF00E676))
+                ),
+              ],
+            ),
+          ),
+          Padding(
+            padding: const EdgeInsets.all(12),
+            child: GridView.count(
+              shrinkWrap: true,
+              physics: const NeverScrollableScrollPhysics(),
+              crossAxisCount: 5,
+              mainAxisSpacing: 8,
+              crossAxisSpacing: 8,
+              childAspectRatio: 1.5,
+              children: [
+                0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0
+              ].map((v) {
+                bool selected = state.rpmSmoothing == v;
+                String label = v == 1.0 ? 'OFF' : '${(v * 100).round()}%';
+                return GestureDetector(
+                  onTap: () => state.setRpmSmoothing(v),
+                  child: AnimatedContainer(
+                    duration: const Duration(milliseconds: 200),
+                    alignment: Alignment.center,
+                    decoration: BoxDecoration(
+                      color: selected ? const Color(0xFF00E676) : Colors.white.withOpacity(0.02),
+                      borderRadius: BorderRadius.circular(4),
+                      border: Border.all(
+                        color: selected ? const Color(0xFF00E676) : Colors.white.withOpacity(0.05),
+                      ),
+                    ),
+                    child: Text(
+                      label, 
+                      style: TextStyle(
+                        color: selected ? Colors.black : Colors.white.withOpacity(0.4), 
+                        fontWeight: selected ? FontWeight.w900 : FontWeight.bold, 
+                        fontSize: 9,
+                      )
+                    ),
+                  ),
+                );
+              }).toList(),
+            ),
+          ),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(20, 0, 20, 16),
+            child: Text(
+              'Lower % = Smoother but slower response. Higher % = Faster but noisier.',
+              style: TextStyle(fontSize: 8, color: Colors.white.withOpacity(0.2), fontStyle: FontStyle.italic),
             ),
           ),
         ],
