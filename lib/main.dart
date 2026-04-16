@@ -511,8 +511,10 @@ class AppState extends ChangeNotifier {
   }
 
   void updateRpm(int val) {
-    // Direct update without complex filtering for stability
-    _rpm = (val * _rpmCalibration).round();
+    double targetRpm = val * _rpmCalibration;
+    // Exponential Moving Average: new = (old * smoothing) + (target * (1 - smoothing))
+    // If smoothing is 0, it's instant. If 0.9, it's very slow/smooth.
+    _rpm = ((_rpm * _rpmSmoothing) + (targetRpm * (1.0 - _rpmSmoothing))).round();
     notifyListeners();
   }
 
