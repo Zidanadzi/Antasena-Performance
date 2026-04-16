@@ -11,9 +11,9 @@ const int txPin = 8;            // Bluetooth TX (D8)
 // Inisialisasi Bluetooth SoftwareSerial
 SoftwareSerial btSerial(rxPin, txPin); 
 
-// --- SIGNAL PROCESSING (9 SAMPLES MEDIAN) ---
+// --- SIGNAL PROCESSING (3 SAMPLES MEDIAN) ---
 volatile unsigned long lastMicros = 0;
-volatile unsigned long intervals[9] = {0,0,0,0,0,0,0,0,0}; 
+volatile unsigned long intervals[3] = {0,0,0}; 
 volatile int intervalIdx = 0;
 unsigned long lastRpmUpdate = 0;
 
@@ -60,8 +60,8 @@ void setup() {
 void loop() {
   unsigned long now = millis();
 
-  // 1. HITUNG & STREAMING RPM (Setiap 50ms)
-  if (now - lastRpmUpdate >= 50) {
+  // 1. HITUNG & STREAMING RPM (Setiap 30ms)
+  if (now - lastRpmUpdate >= 30) {
     float rawRpm = calculateMedianRpm();
     
     if (conf.kalmanOn) {
@@ -75,7 +75,7 @@ void loop() {
 
     if (micros() - lastMicros > 250000) {
       rpmFiltered = 0;
-      for(int i=0; i<9; i++) intervals[i] = 0;
+      for(int i=0; i<3; i++) intervals[i] = 0;
     }
 
     // Kirim Data ke Bluetooth (Aplikasi HP)
@@ -123,26 +123,21 @@ void handleRpmInterrupt() {
   // Noise Filter untuk RPM tinggi (14.000 RPM)
   if (duration > 200) {
     intervals[intervalIdx] = duration;
-    intervalIdx = (intervalIdx + 1) % 9;
+    intervalIdx = (intervalIdx + 1) % 3;
     lastMicros = m;
   }
 }
 
 float calculateMedianRpm() {
-  unsigned long sorted[9];
-  for (int i = 0; i < 9; i++) sorted[i] = intervals[i];
+  unsigned long sorted[3];
+  for (int i = 0; i < 3; i++) sorted[i] = intervals[i];
 
-  for (int i = 0; i < 8; i++) {
-    for (int j = i + 1; j < 9; j++) {
-      if (sorted[i] > sorted[j]) {
-        unsigned long temp = sorted[i];
-        sorted[i] = sorted[j];
-        sorted[j] = temp;
-      }
-    }
-  }
+  // Simple sort for 3 items
+  if (sorted[0] > sorted[1]) { unsigned long t = sorted[0]; sorted[0] = sorted[1]; sorted[1] = t; }
+  if (sorted[1] > sorted[2]) { unsigned long t = sorted[1]; sorted[1] = sorted[2]; sorted[2] = t; }
+  if (sorted[0] > sorted[1]) { unsigned long t = sorted[0]; sorted[0] = sorted[1]; sorted[1] = t; }
 
-  unsigned long medianInterval = sorted[4];
+  unsigned long medianInterval = sorted[1];
   if (medianInterval == 0) return 0;
 
   return (60000000.0 / (float)medianInterval) / conf.rpmDivider;
@@ -197,7 +192,7 @@ void loadConfig() {
     conf.k3k = 70; conf.k6k = 65; conf.k9k = 75; conf.k12k = 80;
     conf.rpmDivider = 11.66;
     conf.shiftRpm = 11500;
-    conf.kalmanOn = true;
+    conf.kalmanOn = false;
     conf.q_kalman = 0.05;
     conf.r_kalman = 20.0;
     conf.magicNumber = 777;
