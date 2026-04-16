@@ -52,6 +52,9 @@ void setup() {
   attachInterrupt(digitalPinToInterrupt(rpmPin), handleRpmInterrupt, FALLING);
   
   loadConfig();
+  
+  btSerial.println("STATUS:CONNECTED");
+  Serial.println("STATUS:CONNECTED");
 }
 
 void loop() {
@@ -79,8 +82,13 @@ void loop() {
     btSerial.print("RPM:");
     btSerial.println((int)rpmFiltered);
 
+    // Debug ke USB (Serial Monitor)
+    Serial.print("RPM:");
+    Serial.println((int)rpmFiltered);
+
     if (rpmFiltered >= conf.shiftRpm && conf.shiftRpm > 0) {
       btSerial.println("SHIFT!");
+      Serial.println("SHIFT!");
     }
 
     lastRpmUpdate = now;

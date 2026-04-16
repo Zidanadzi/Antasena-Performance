@@ -39,7 +39,7 @@ class AppState extends ChangeNotifier {
   
   // Settings
   double _minRpmActive = 3000;
-  double _rpmCalibration = 11.66; // Updated to match MX King default
+  double _rpmCalibration = 1.0; // Changed back to 1.0 as Arduino handles the divider
   double _rpmSmoothing = 0.3; 
   double _shiftRpm = 11500; // New setting
   List<int> _tableRpm = [3000, 6000, 9000, 12000];
@@ -175,7 +175,7 @@ class AppState extends ChangeNotifier {
   Future<void> _loadSettings() async {
     final prefs = await SharedPreferences.getInstance();
     _minRpmActive = prefs.getDouble('minRpmActive') ?? 3000;
-    _rpmCalibration = prefs.getDouble('rpmCalibration') ?? 11.66;
+    _rpmCalibration = prefs.getDouble('rpmCalibration') ?? 1.0;
     _rpmSmoothing = prefs.getDouble('rpmSmoothing') ?? 0.3;
     _shiftRpm = prefs.getDouble('shiftRpm') ?? 11500;
     _useKalmanFilter = prefs.getBool('useKalmanFilter') ?? true;
@@ -409,7 +409,7 @@ class AppState extends ChangeNotifier {
           _messageBuffer = _messageBuffer.substring(index + 1);
           
           // More robust Regex parsing for RPM only
-          final rpmMatch = RegExp(r'RPM\s*:\s*(\d+)').firstMatch(msg);
+          final rpmMatch = RegExp(r'RPM\s*[:=]\s*(\d+)').firstMatch(msg);
           if (rpmMatch != null) {
             int? val = int.tryParse(rpmMatch.group(1)!);
             if (val != null) updateRpm(val);
@@ -1483,6 +1483,30 @@ class _TuningPageState extends State<TuningPage> {
             _buildStealthSmoothingSelector(state),
             const SizedBox(height: 16),
             _buildAdvancedFilteringSection(state),
+            
+            const SizedBox(height: 32),
+            _buildSectionHeader('DEBUG CONSOLE'),
+            const SizedBox(height: 20),
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: const Color(0xFF0A0A0A),
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: Colors.white.withOpacity(0.08)),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('LAST RAW MESSAGE:', style: TextStyle(color: Colors.white.withOpacity(0.3), fontSize: 8, fontWeight: FontWeight.bold)),
+                  const SizedBox(height: 8),
+                  Text(
+                    state.lastRawMessage.isEmpty ? 'Waiting for data...' : state.lastRawMessage,
+                    style: GoogleFonts.jetBrainsMono(fontSize: 12, color: const Color(0xFF00E676)),
+                  ),
+                ],
+              ),
+            ),
             
             const SizedBox(height: 32),
             _buildSectionHeader('KILL TIME MATRIX'),
