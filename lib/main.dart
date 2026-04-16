@@ -671,6 +671,16 @@ class AppState extends ChangeNotifier {
     }
   }
 
+  Future<void> sendMessage(String message) async {
+    if (!_isConnected || _classicConnection == null) return;
+    try {
+      _classicConnection!.output.add(Uint8List.fromList(message.codeUnits));
+      await _classicConnection!.output.allSent;
+    } catch (e) {
+      debugPrint('Send error: $e');
+    }
+  }
+
   Future<void> saveSettings(BuildContext context) async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setDouble('minRpmActive', _minRpmActive);
@@ -689,11 +699,11 @@ class AppState extends ChangeNotifier {
     // Write to Bluetooth Module if connected
     if (_isConnected && _classicConnection != null) {
       try {
-        // New protocol: SET_ALL:minRpm,k3k,k6k,k9k,k12k,divider,shiftRpm,kalmanOn,q,r
-        String config = "SET_ALL:${_minRpmActive.round()},${_tableKill[0]},${_tableKill[1]},${_tableKill[2]},${_tableKill[3]},${_rpmCalibration.toStringAsFixed(2)},${_shiftRpm.round()},${_useKalmanFilter ? 1 : 0},${_kalmanQ.toStringAsFixed(4)},${_kalmanR.toStringAsFixed(2)}\n";
+        // Updated protocol to match user's Arduino 'S' command:
+        // S[minRpmActive],[rpmCalibration],[tableRpm0],[tableKill0],[tableRpm1],[tableKill1],[tableRpm2],[tableKill2],[tableRpm3],[tableKill3]
+        String config = "S${_minRpmActive.round()},${_rpmCalibration.toStringAsFixed(2)},${_tableRpm[0]},${_tableKill[0]},${_tableRpm[1]},${_tableKill[1]},${_tableRpm[2]},${_tableKill[2]},${_tableRpm[3]},${_tableKill[3]}\n";
         
-        _classicConnection!.output.add(Uint8List.fromList(config.codeUnits));
-        await _classicConnection!.output.allSent;
+        await sendMessage(config);
         debugPrint('Config sent to module: $config');
         writeSuccess = true;
         message = "Settings written to module successfully";
