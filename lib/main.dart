@@ -56,7 +56,7 @@ class AppState extends ChangeNotifier {
   String _messageBuffer = "";
   String _lastRawMessage = "No data yet";
   int _totalBytesReceived = 0;
-  String _rawHexData = "";
+  final String _rawHexData = "";
   List<classic.BluetoothDevice> _classicDevices = [];
   
   // Racebox
@@ -85,8 +85,6 @@ class AppState extends ChangeNotifier {
   bool _useKalmanFilter = false;
   double _kalmanQ = 0.1; // Process Noise
   double _kalmanR = 2.0; // Measurement Noise
-  double _kalmanP = 1.0; // Error Covariance
-  double _kalmanX = 0.0; // Estimated RPM
   
   // Getters
   int get rpm => _rpm;
@@ -1449,6 +1447,7 @@ class _TuningPageState extends State<TuningPage> {
   @override
   Widget build(BuildContext context) {
     final state = context.watch<AppState>();
+    const Color accentColor = Color(0xFF00E676);
 
     return Scaffold(
       backgroundColor: Colors.black,
