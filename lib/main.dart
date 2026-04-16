@@ -1515,12 +1515,12 @@ class _TuningPageState extends State<TuningPage> {
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      Text('BT MONITOR', style: TextStyle(color: Colors.white.withOpacity(0.3), fontSize: 8, fontWeight: FontWeight.bold)),
-                      Text('BYTES: ${state.totalBytesReceived}', style: TextStyle(color: accentColor, fontSize: 8, fontWeight: FontWeight.bold)),
+                      Text('BT MONITOR', style: const TextStyle(color: Color(0x4DFFFFFF), fontSize: 8, fontWeight: FontWeight.bold)),
+                      Text('BYTES: ${state.totalBytesReceived}', style: const TextStyle(color: accentColor, fontSize: 8, fontWeight: FontWeight.bold)),
                     ],
                   ),
                   const SizedBox(height: 12),
-                  Text('LAST STRING:', style: TextStyle(color: Colors.white.withOpacity(0.2), fontSize: 7)),
+                  Text('LAST STRING:', style: const TextStyle(color: Color(0x33FFFFFF), fontSize: 7)),
                   Text(
                     state.lastRawMessage.isEmpty ? 'Waiting...' : state.lastRawMessage,
                     style: GoogleFonts.jetBrainsMono(fontSize: 11, color: const Color(0xFF00E676)),
