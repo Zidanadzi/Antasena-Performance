@@ -86,6 +86,9 @@ class AppState extends ChangeNotifier {
   double _kalmanQ = 0.1; // Process Noise
   double _kalmanR = 2.0; // Measurement Noise
   
+  // Dashboard color state
+  bool _isShiftPoint = false; 
+
   // Getters
   int get rpm => _rpm;
   double get speed => _speed;
@@ -93,6 +96,7 @@ class AppState extends ChangeNotifier {
   double get rpmCalibration => _rpmCalibration;
   double get rpmSmoothing => _rpmSmoothing;
   double get rpmDivider => _rpmDivider;
+  bool get isShiftPoint => _isShiftPoint;
   bool get useKalmanFilter => _useKalmanFilter;
   double get kalmanQ => _kalmanQ;
   double get kalmanR => _kalmanR;
@@ -512,18 +516,19 @@ class AppState extends ChangeNotifier {
   }
 
   void updateRpm(int val) {
-    double targetRpm = (val.toDouble() / _rpmDivider) * _rpmCalibration;
+    // Arduino already applies Divider and Calibration before sending
+    // So we just display the value or apply minor optional smoothing
+    double targetRpm = val.toDouble();
     
-    // Sederhanakan: Jika smoothing di atas 0.9 (90%), anggap OFF agar tidak delay
     if (_rpmSmoothing >= 0.95) {
       _rpm = targetRpm.round();
     } else {
-      // Exponential Moving Average yang lebih stabil
       _rpm = ((_rpm * _rpmSmoothing) + (targetRpm * (1.0 - _rpmSmoothing))).round();
     }
     
-    // Visual Shift Point (Threshold fixed at 12000 or removed?)
-    // User asked to change shift light feature into divider, so we'll disable the threshold visual
+    // We can still trigger some shift notifications if needed, 
+    // but the user wants the "feature" changed to Divider, so we'll 
+    // just keep it false or tether it to a high fixed value if you want.
     _isShiftPoint = false;
     
     notifyListeners();
@@ -710,9 +715,8 @@ class AppState extends ChangeNotifier {
     // Write to Bluetooth Module if connected
     if (_isConnected && _classicConnection != null) {
       try {
-        // Updated protocol to match user's Arduino 'S' command:
-        // S[minRpmActive],[rpmCalibration],[tableRpm0],[tableKill0],[tableRpm1],[tableKill1],[tableRpm2],[tableKill2],[tableRpm3],[tableKill3]
-        String config = "S${_minRpmActive.round()},${_rpmCalibration.toStringAsFixed(2)},${_tableRpm[0]},${_tableKill[0]},${_tableRpm[1]},${_tableKill[1]},${_tableRpm[2]},${_tableKill[2]},${_tableRpm[3]},${_tableKill[3]}\n";
+        // Protocol 11 parameters: S[min],[cal],[div],[rpm0],[kill0],[rpm1],[kill1],[rpm2],[kill2],[rpm3],[kill3]
+        String config = "S${_minRpmActive.round()},${_rpmCalibration.toStringAsFixed(2)},${_rpmDivider.toStringAsFixed(2)},${_tableRpm[0]},${_tableKill[0]},${_tableRpm[1]},${_tableKill[1]},${_tableRpm[2]},${_tableKill[2]},${_tableRpm[3]},${_tableKill[3]}\n";
         
         await sendMessage(config);
         debugPrint('Config sent to module: $config');
@@ -906,8 +910,8 @@ class DashboardPage extends StatelessWidget {
     final state = context.watch<AppState>();
     const Color accentColor = Color(0xFF00E676);
     
-    // Shift Light Logic: Flash screen if RPM is high
-    bool isShiftPoint = false; // Shift point logic repurposed to Divider setting
+    // Shift Light Logic: Repurposed/Disabled as per divider request
+    bool isShiftPoint = state.isShiftPoint;
 
     return Scaffold(
       backgroundColor: isShiftPoint ? accentColor : const Color(0xFF0F0F0F),
@@ -1023,7 +1027,7 @@ class DashboardPage extends StatelessWidget {
                 child: Row(
                   mainAxisAlignment: MainAxisAlignment.spaceAround,
                   children: [
-                    _buildCompactStatItem('MIN ACTIVE', state.minRpmActive.round().toString(), 'RPM', isShiftPoint, accentColor),
+                    _buildCompactStatItem('DIVIDER', state.rpmDivider.toStringAsFixed(1), 'DIV', isShiftPoint, accentColor),
                     Container(width: 1, height: 24, color: Colors.white.withOpacity(0.05)),
                     _buildCompactStatItem('CALIBRATION', state.rpmCalibration.toStringAsFixed(1), 'X', isShiftPoint, accentColor),
                     Container(width: 1, height: 24, color: Colors.white.withOpacity(0.05)),

@@ -12,7 +12,7 @@ const int PIN_KILL_OUT = 10;    // Output ke Relay/Coil Kill
 SoftwareSerial btSerial(8, 9);  // Bluetooth: 8=RX(ke TX BT), 9=TX(ke RX BT)
 
 // CALIBRATION & FILTERING
-const float RPM_DIVIDER = 11.66; 
+float rpmDivider = 11.66; // Adjustable via App
 const int DEBOUNCE_RPM = 350;     // Proteksi noise (us)
 float smoothedRpm = 0;
 float smoothingFactor = 0.85;     // 0.85 = Sangat Halus (Smooth)
@@ -54,7 +54,7 @@ void loop() {
   if (now - lastPulseTime > 300000) { // Jika mesin mati / di bawah 200 RPM
     rawRpm = 0;
   } else if (currentInterval > 0) {
-    rawRpm = (60000000.0 / currentInterval) / RPM_DIVIDER;
+    rawRpm = (60000000.0 / currentInterval) / rpmDivider;
   }
 
   // 2. FILTERING (EMA - Exponential Moving Average)
@@ -131,17 +131,18 @@ void parseSettings(String data) {
   data.toCharArray(str, 120);
   int count = 0;
   char* ptr = strtok(str, ",");
-  while (ptr != NULL && count < 10) {
+  while (ptr != NULL && count < 11) {
     if (count == 0) minRpmActive = atoi(ptr);
     else if (count == 1) rpmCalibration = atof(ptr);
-    else if (count == 2) tableRpm[0] = atoi(ptr);
-    else if (count == 3) tableKill[0] = atoi(ptr);
-    else if (count == 4) tableRpm[1] = atoi(ptr);
-    else if (count == 5) tableKill[1] = atoi(ptr);
-    else if (count == 6) tableRpm[2] = atoi(ptr);
-    else if (count == 7) tableKill[2] = atoi(ptr);
-    else if (count == 8) tableRpm[3] = atoi(ptr);
-    else if (count == 9) tableKill[3] = atoi(ptr);
+    else if (count == 2) rpmDivider = atof(ptr);
+    else if (count == 3) tableRpm[0] = atoi(ptr);
+    else if (count == 4) tableKill[0] = atoi(ptr);
+    else if (count == 5) tableRpm[1] = atoi(ptr);
+    else if (count == 6) tableKill[1] = atoi(ptr);
+    else if (count == 7) tableRpm[2] = atoi(ptr);
+    else if (count == 8) tableKill[2] = atoi(ptr);
+    else if (count == 9) tableRpm[3] = atoi(ptr);
+    else if (count == 10) tableKill[3] = atoi(ptr);
     ptr = strtok(NULL, ",");
     count++;
   }
