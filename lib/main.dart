@@ -1018,19 +1018,21 @@ class DashboardPage extends StatelessWidget {
 
               // BOTTOM STATS
               Container(
-                padding: const EdgeInsets.all(16),
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 12),
                 decoration: BoxDecoration(
                   color: Colors.white.withOpacity(0.01),
                   borderRadius: BorderRadius.circular(12),
                   border: Border.all(color: Colors.white.withOpacity(0.03)),
                 ),
                 child: Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceAround,
+                  mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                   children: [
                     _buildCompactStatItem('DIVIDER', state.rpmDivider.toStringAsFixed(1), 'DIV', isShiftPoint, accentColor),
-                    Container(width: 1, height: 24, color: Colors.white.withOpacity(0.05)),
+                    _buildCompactDivider(isShiftPoint),
                     _buildCompactStatItem('CALIBRATION', state.rpmCalibration.toStringAsFixed(1), 'X', isShiftPoint, accentColor),
-                    Container(width: 1, height: 24, color: Colors.white.withOpacity(0.05)),
+                    _buildCompactDivider(isShiftPoint),
+                    _buildCompactStatItem('MIN RPM', state.minRpmActive.round().toString(), 'RPM', isShiftPoint, accentColor),
+                    _buildCompactDivider(isShiftPoint),
                     _buildCompactStatItem('GPS ACC', state.gpsAccuracy.round().toString(), 'M', isShiftPoint, accentColor),
                   ],
                 ),
@@ -1077,6 +1079,10 @@ class DashboardPage extends StatelessWidget {
     ],
   ),
 );
+  }
+
+  Widget _buildCompactDivider(bool isShiftPoint) {
+    return Container(width: 1, height: 18, color: isShiftPoint ? Colors.black.withOpacity(0.1) : Colors.white.withOpacity(0.05));
   }
 
   Widget _buildCompactStatItem(String label, String value, String unit, bool isShiftPoint, Color accentColor) {
@@ -1511,74 +1517,16 @@ class _TuningPageState extends State<TuningPage> {
             _buildStealthSmoothingSelector(state),
             
             const SizedBox(height: 32),
-            _buildSectionHeader('DEBUG CONSOLE'),
-            const SizedBox(height: 20),
-            Container(
-              width: double.infinity,
-              padding: const EdgeInsets.all(16),
-              decoration: BoxDecoration(
-                color: const Color(0xFF0A0A0A),
-                borderRadius: BorderRadius.circular(8),
-                border: Border.all(color: Colors.white.withOpacity(0.08)),
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      const Text('BT MONITOR', style: TextStyle(color: Color(0x4DFFFFFF), fontSize: 8, fontWeight: FontWeight.bold)),
-                      Text('BYTES: ${state.totalBytesReceived}', style: const TextStyle(color: accentColor, fontSize: 8, fontWeight: FontWeight.bold)),
-                    ],
-                  ),
-                  const SizedBox(height: 12),
-                  const Text('LAST STRING:', style: TextStyle(color: Color(0x33FFFFFF), fontSize: 7)),
-                  Text(
-                    state.lastRawMessage.isEmpty ? 'Waiting...' : state.lastRawMessage,
-                    style: GoogleFonts.jetBrainsMono(fontSize: 11, color: const Color(0xFF00E676)),
-                  ),
-                  const SizedBox(height: 12),
-                  const Text('RAW HEX (LATEST):', style: TextStyle(color: Color(0x33FFFFFF), fontSize: 7)),
-                  Text(
-                    state.rawHexData.isEmpty ? 'No hex data' : state.rawHexData,
-                    style: GoogleFonts.jetBrainsMono(fontSize: 10, color: Colors.orangeAccent.withOpacity(0.8)),
-                  ),
-                  const SizedBox(height: 16),
-                  Row(
-                    children: [
-                      Expanded(
-                        child: ElevatedButton(
-                          onPressed: () => state.sendMessage("PING\n"),
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: Colors.white.withOpacity(0.05),
-                            padding: const EdgeInsets.symmetric(vertical: 8),
-                          ),
-                          child: Text("SEND PING", style: GoogleFonts.jetBrainsMono(fontSize: 10, color: Colors.white)),
-                        ),
-                      ),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: ElevatedButton(
-                          onPressed: () => state.requestManualPermissions(),
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: Colors.white.withOpacity(0.05),
-                            padding: const EdgeInsets.symmetric(vertical: 8),
-                          ),
-                          child: Text("FIX PERMS", style: GoogleFonts.jetBrainsMono(fontSize: 10, color: Colors.white)),
-                        ),
-                      ),
-                    ],
-                  )
-                ],
-              ),
-            ),
-            
-            const SizedBox(height: 32),
             _buildSectionHeader('KILL TIME MATRIX'),
             const SizedBox(height: 20),
             _buildStealthKillMatrix(context, state),
             
-            const SizedBox(height: 40),
+            const SizedBox(height: 32),
+            _buildSectionHeader('SYNC STATUS'),
+            const SizedBox(height: 20),
+            _buildCompactSyncIndicator(state),
+            
+            const SizedBox(height: 48),
             
             // Write Button
             GestureDetector(
@@ -1601,6 +1549,64 @@ class _TuningPageState extends State<TuningPage> {
             const SizedBox(height: 40),
           ],
         ),
+      ),
+    );
+  }
+
+  Widget _buildCompactSyncIndicator(AppState state) {
+    bool connected = state.isConnected;
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: const Color(0xFF070707),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: Colors.white.withOpacity(0.05)),
+      ),
+      child: Row(
+        children: [
+          Container(
+            width: 8,
+            height: 8,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              color: connected ? const Color(0xFF00E676) : Colors.red,
+              boxShadow: [
+                BoxShadow(
+                  color: (connected ? const Color(0xFF00E676) : Colors.red).withOpacity(0.4),
+                  blurRadius: 8,
+                  spreadRadius: 2,
+                )
+              ],
+            ),
+          ),
+          const SizedBox(width: 16),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  connected ? "SYNCHRONIZED WITH MODULE" : "WAITING FOR MODULE",
+                  style: GoogleFonts.jetBrainsMono(
+                    fontSize: 10,
+                    fontWeight: FontWeight.bold,
+                    color: connected ? Colors.white : Colors.white24,
+                  ),
+                ),
+                if (connected)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 4.0),
+                    child: Text(
+                      "BT CLASSIQ • 9600 BAUD • ${state.totalBytesReceived} BYTES RX",
+                      style: const TextStyle(fontSize: 7, color: Colors.white10, fontWeight: FontWeight.bold),
+                    ),
+                  ),
+              ],
+            ),
+          ),
+          if (connected)
+            const Icon(Icons.bolt, color: Color(0xFF00E676), size: 14),
+        ],
       ),
     );
   }
@@ -1746,35 +1752,36 @@ class _TuningPageState extends State<TuningPage> {
   Widget _buildStealthKillMatrix(BuildContext context, AppState state) {
     return Container(
       decoration: BoxDecoration(
-        color: const Color(0xFF0A0A0A),
+        color: const Color(0xFF070707),
         borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: Colors.white.withOpacity(0.08)),
+        border: Border.all(color: Colors.white.withOpacity(0.05)),
       ),
       clipBehavior: Clip.antiAlias,
       child: Column(
         children: [
           // Table Header
           Container(
-            padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 20),
-            color: Colors.white.withOpacity(0.03),
+            padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 16),
+            color: Colors.white.withOpacity(0.02),
             child: const Row(
               children: [
-                Expanded(flex: 2, child: Text('RPM THRESHOLD', style: TextStyle(fontSize: 9, fontWeight: FontWeight.w900, color: Colors.white24, letterSpacing: 1))),
-                Expanded(child: Text('KILL (MS)', style: TextStyle(fontSize: 9, fontWeight: FontWeight.w900, color: Colors.white24, letterSpacing: 1))),
+                Expanded(flex: 3, child: Text('RPM THRESHOLD', style: TextStyle(fontSize: 8, fontWeight: FontWeight.w900, color: Colors.white24, letterSpacing: 1))),
+                Expanded(flex: 2, child: Text('KILL DURATION', style: TextStyle(fontSize: 8, fontWeight: FontWeight.w900, color: Colors.white24, letterSpacing: 1), textAlign: TextAlign.right)),
               ],
             ),
           ),
           // Table Rows
           ...List.generate(4, (i) {
+            bool isLast = i == 3;
             return Container(
-              padding: const EdgeInsets.symmetric(vertical: 18, horizontal: 20),
+              padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
               decoration: BoxDecoration(
-                border: Border(top: BorderSide(color: Colors.white.withOpacity(0.05))),
+                border: Border(bottom: isLast ? BorderSide.none : BorderSide(color: Colors.white.withOpacity(0.03))),
               ),
               child: Row(
                 children: [
                   Expanded(
-                    flex: 2, 
+                    flex: 3, 
                     child: GestureDetector(
                       onTap: () {
                         setState(() => _editingRpmIndex = i);
@@ -1782,36 +1789,33 @@ class _TuningPageState extends State<TuningPage> {
                           state.setTableRpm(i, int.tryParse(val) ?? 0);
                         }, onDismiss: () => setState(() => _editingRpmIndex = null));
                       },
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(vertical: 4),
-                        child: Row(
-                          children: [
-                            Container(
-                              width: 3,
-                              height: 12,
-                              decoration: BoxDecoration(
-                                color: const Color(0xFF00E676),
-                                borderRadius: BorderRadius.circular(1),
-                              ),
+                      child: Row(
+                        children: [
+                          Container(
+                            width: 2,
+                            height: 10,
+                            decoration: BoxDecoration(
+                              color: const Color(0xFF00E676),
+                              borderRadius: BorderRadius.circular(1),
                             ),
-                            const SizedBox(width: 12),
-                            Text(
-                              state.tableRpm[i].toString(), 
-                              style: GoogleFonts.jetBrainsMono(
-                                fontWeight: FontWeight.bold, 
-                                fontSize: 16,
-                                color: _editingRpmIndex == i ? const Color(0xFFFFFFFF) : Colors.white.withOpacity(0.9),
-                                shadows: _editingRpmIndex == i ? [
-                                  const Shadow(color: Colors.white, blurRadius: 10),
-                                ] : null,
-                              )
-                            ),
-                          ],
-                        ),
+                          ),
+                          const SizedBox(width: 8),
+                          Text(
+                            state.tableRpm[i].toString(), 
+                            style: GoogleFonts.jetBrainsMono(
+                              fontWeight: FontWeight.bold, 
+                              fontSize: 14,
+                              color: _editingRpmIndex == i ? const Color(0xFFFFFFFF) : Colors.white.withOpacity(0.8),
+                            )
+                          ),
+                          const SizedBox(width: 4),
+                          Text('RPM', style: TextStyle(color: Colors.white.withOpacity(0.1), fontSize: 7, fontWeight: FontWeight.bold)),
+                        ],
                       )
                     )
                   ),
                   Expanded(
+                    flex: 2,
                     child: GestureDetector(
                       onTap: () {
                         setState(() => _editingKillIndex = i);
@@ -1819,20 +1823,22 @@ class _TuningPageState extends State<TuningPage> {
                           state.setTableKill(i, int.tryParse(val) ?? 0);
                         }, onDismiss: () => setState(() => _editingKillIndex = null));
                       },
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(vertical: 4),
-                        alignment: Alignment.centerRight,
-                        child: Text(
-                          state.tableKill[i].toString(), 
-                          style: GoogleFonts.jetBrainsMono(
-                            fontWeight: FontWeight.w900, 
-                            fontSize: 16, 
-                            color: _editingKillIndex == i ? const Color(0xFF66FF66) : const Color(0xFF00FF00),
-                            shadows: _editingKillIndex == i ? [
-                              const Shadow(color: Color(0xFF00FF00), blurRadius: 15),
-                            ] : null,
-                          )
-                        ),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.end,
+                        crossAxisAlignment: CrossAxisAlignment.baseline,
+                        textBaseline: TextBaseline.alphabetic,
+                        children: [
+                          Text(
+                            state.tableKill[i].toString(), 
+                            style: GoogleFonts.jetBrainsMono(
+                              fontWeight: FontWeight.w900, 
+                              fontSize: 14, 
+                              color: _editingKillIndex == i ? const Color(0xFF66FF66) : const Color(0xFF00FF00),
+                            )
+                          ),
+                          const SizedBox(width: 4),
+                          Text('MS', style: TextStyle(color: const Color(0xFF00E676).withOpacity(0.2), fontSize: 7, fontWeight: FontWeight.bold)),
+                        ],
                       )
                     )
                   ),
