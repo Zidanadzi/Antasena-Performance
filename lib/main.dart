@@ -39,9 +39,9 @@ class AppState extends ChangeNotifier {
   
   // Settings
   double _minRpmActive = 3000;
-  double _rpmCalibration = 1.0; // Changed back to 1.0 as Arduino handles the divider
   double _rpmSmoothing = 0.3; 
-  double _shiftRpm = 11500; // New setting
+  double _rpmDivider = 11.66; // Adjustable RPM Divider
+  double _rpmCalibration = 1.0; 
   List<int> _tableRpm = [3000, 6000, 9000, 12000];
   List<int> _tableKill = [70, 65, 75, 80]; // Updated defaults
   
@@ -92,7 +92,7 @@ class AppState extends ChangeNotifier {
   double get minRpmActive => _minRpmActive;
   double get rpmCalibration => _rpmCalibration;
   double get rpmSmoothing => _rpmSmoothing;
-  double get shiftRpm => _shiftRpm; // New getter
+  double get rpmDivider => _rpmDivider;
   bool get useKalmanFilter => _useKalmanFilter;
   double get kalmanQ => _kalmanQ;
   double get kalmanR => _kalmanR;
@@ -179,7 +179,7 @@ class AppState extends ChangeNotifier {
     _minRpmActive = prefs.getDouble('minRpmActive') ?? 3000;
     _rpmCalibration = prefs.getDouble('rpmCalibration') ?? 1.0;
     _rpmSmoothing = prefs.getDouble('rpmSmoothing') ?? 0.3;
-    _shiftRpm = prefs.getDouble('shiftRpm') ?? 11500;
+    _rpmDivider = prefs.getDouble('rpmDivider') ?? 11.66;
     _useKalmanFilter = prefs.getBool('useKalmanFilter') ?? true;
     _kalmanQ = prefs.getDouble('kalmanQ') ?? 0.05;
     _kalmanR = prefs.getDouble('kalmanR') ?? 20.0;
@@ -512,7 +512,7 @@ class AppState extends ChangeNotifier {
   }
 
   void updateRpm(int val) {
-    double targetRpm = val * _rpmCalibration;
+    double targetRpm = (val.toDouble() / _rpmDivider) * _rpmCalibration;
     
     // Sederhanakan: Jika smoothing di atas 0.9 (90%), anggap OFF agar tidak delay
     if (_rpmSmoothing >= 0.95) {
@@ -521,6 +521,11 @@ class AppState extends ChangeNotifier {
       // Exponential Moving Average yang lebih stabil
       _rpm = ((_rpm * _rpmSmoothing) + (targetRpm * (1.0 - _rpmSmoothing))).round();
     }
+    
+    // Visual Shift Point (Threshold fixed at 12000 or removed?)
+    // User asked to change shift light feature into divider, so we'll disable the threshold visual
+    _isShiftPoint = false;
+    
     notifyListeners();
   }
 
@@ -549,8 +554,8 @@ class AppState extends ChangeNotifier {
     notifyListeners();
   }
 
-  void setShiftRpm(double val) {
-    _shiftRpm = val;
+  void setRpmDivider(double val) {
+    _rpmDivider = val;
     notifyListeners();
   }
 
@@ -692,7 +697,7 @@ class AppState extends ChangeNotifier {
     await prefs.setDouble('minRpmActive', _minRpmActive);
     await prefs.setDouble('rpmCalibration', _rpmCalibration);
     await prefs.setDouble('rpmSmoothing', _rpmSmoothing);
-    await prefs.setDouble('shiftRpm', _shiftRpm);
+    await prefs.setDouble('rpmDivider', _rpmDivider);
     await prefs.setBool('useKalmanFilter', _useKalmanFilter);
     await prefs.setDouble('kalmanQ', _kalmanQ);
     await prefs.setDouble('kalmanR', _kalmanR);
@@ -902,7 +907,7 @@ class DashboardPage extends StatelessWidget {
     const Color accentColor = Color(0xFF00E676);
     
     // Shift Light Logic: Flash screen if RPM is high
-    bool isShiftPoint = state.rpm >= state.shiftRpm;
+    bool isShiftPoint = false; // Shift point logic repurposed to Divider setting
 
     return Scaffold(
       backgroundColor: isShiftPoint ? accentColor : const Color(0xFF0F0F0F),
@@ -1486,20 +1491,17 @@ class _TuningPageState extends State<TuningPage> {
             ),
             const SizedBox(height: 16),
             GestureDetector(
-              onTap: () => _showEditDialog(context, 'RPM DIVIDER', state.rpmCalibration.toString(), (val) {
-                state.setRpmCalibration(double.tryParse(val) ?? 11.66);
+              onTap: () => _showEditDialog(context, 'RPM CALIBRATION', state.rpmCalibration.toString(), (val) {
+                state.setRpmCalibration(double.tryParse(val) ?? 1.0);
               }),
-              child: _buildStealthTuningCard('RPM DIVIDER (CALIBRATION)', state.rpmCalibration.toString(), 'DIV'),
+              child: _buildStealthTuningCard('RPM CALIBRATION', state.rpmCalibration.toString(), 'X'),
             ),
             const SizedBox(height: 16),
             GestureDetector(
-              onTap: () => _showEditDialog(context, 'SHIFT LIGHT RPM', state.shiftRpm.round().toString(), (val) {
-                // We need to add a setShiftRpm method to AppState
-                // For now I'll use a direct assignment if I can or add the method
-                // I'll add the method in the next chunk
-                state.setShiftRpm(double.tryParse(val) ?? 11500);
+              onTap: () => _showEditDialog(context, 'RPM DIVIDER', state.rpmDivider.toString(), (val) {
+                state.setRpmDivider(double.tryParse(val) ?? 1.0);
               }),
-              child: _buildStealthTuningCard('SHIFT LIGHT RPM', state.shiftRpm.round().toString(), 'RPM'),
+              child: _buildStealthTuningCard('RPM DIVIDER', state.rpmDivider.toString(), 'DIV'),
             ),
             const SizedBox(height: 16),
             _buildStealthSmoothingSelector(state),

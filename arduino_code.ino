@@ -1,200 +1,149 @@
-#include <EEPROM.h>
 #include <SoftwareSerial.h>
 
-// Daftar fungsi agar Arduinodroid lancar
-void handleRpmInterrupt();
-void loadConfig();
-float getRpm();
-int getKillTime(float rpm);
-void handleBluetooth();
+// --- TAMBAHKAN PROTOTYPE FUNGSI DI SINI (SOLUSI ERROR UNDECLARED) ---
+void rpmPulse();
+void executeKill();
 void parseSettings(String data);
 
-const int qsPin = 2;            
-const int rpmPin = 3;           
-const int relayPin = 10;        
-const int rxPin = 9;            
-const int txPin = 8;            
+// PIN CONFIGURATION
+const int PIN_SHIFT_SENSOR = 2; // Sensor Quick Shifter
+const int PIN_PULSER = 3;       // Sinyal RPM (Pulser/Koil)
+const int PIN_KILL_OUT = 10;    // Output ke Relay/Coil Kill
+SoftwareSerial btSerial(8, 9);  // Bluetooth: 8=RX(ke TX BT), 9=TX(ke RX BT)
 
-SoftwareSerial btSerial(rxPin, txPin); 
-
-// MEDIAN 5: STABIL DAN CEPAT
-volatile unsigned long lastMicros = 0;
-volatile unsigned long intervals[5] = {0,0,0,0,0}; 
-volatile int intervalIdx = 0;
-unsigned long lastRpmUpdate = 0;
-
-struct Config {
-  float minRpm;
-  float rpmDivider;
-  int tableRpm[4];
-  int tableKill[4];
-  int magicNumber;
-};
-
-Config conf;
+// CALIBRATION & FILTERING
+const float RPM_DIVIDER = 11.66; 
+const int DEBOUNCE_RPM = 350;     // Proteksi noise (us)
 float smoothedRpm = 0;
+float smoothingFactor = 0.85;     // 0.85 = Sangat Halus (Smooth)
+
+// SETTINGS (Default)
+int minRpmActive = 3000;
+float rpmCalibration = 1.0;
+int tableRpm[4] = {3000, 6000, 9000, 12000};
+int tableKill[4] = {90, 80, 70, 60}; 
+
+// VOLATILE VARIABLES FOR INTERRUPT
+volatile unsigned long lastPulseTime = 0;
+volatile unsigned long pulseInterval = 0;
 
 void setup() {
-  Serial.begin(9600);
-  btSerial.begin(9600); 
+  sei(); // Pastikan interupsi global aktif
+  delay(3000); // Tunggu Bluetooth Warming-up
   
-  pinMode(rpmPin, INPUT_PULLUP);
-  pinMode(qsPin, INPUT_PULLUP);
-  pinMode(relayPin, OUTPUT);
-  digitalWrite(relayPin, LOW); 
-
-  attachInterrupt(digitalPinToInterrupt(rpmPin), handleRpmInterrupt, FALLING);
+  btSerial.begin(9600);
   
-  loadConfig();
+  pinMode(PIN_PULSER, INPUT_PULLUP);
+  pinMode(PIN_SHIFT_SENSOR, INPUT_PULLUP);
+  pinMode(PIN_KILL_OUT, OUTPUT);
+  digitalWrite(PIN_KILL_OUT, LOW);
   
-  delay(1000); 
-  btSerial.println("STATUS:READY");
+  // Interrupt pada Pin 3 (Pulser)
+  attachInterrupt(digitalPinToInterrupt(PIN_PULSER), rpmPulse, FALLING);
 }
 
 void loop() {
-  unsigned long now = millis();
+  // 1. HITUNG RPM (TANPA MEMLOKIR INTERUPSI)
+  unsigned long now = micros();
+  unsigned long currentInterval;
+  
+  // Copy data dari variabel volatile secara cepat
+  currentInterval = pulseInterval;
 
-  // 1. BROADCAST RPM (SETIAP 100ms - Rekomendasi Stabil)
+  float rawRpm = 0;
+  if (now - lastPulseTime > 300000) { // Jika mesin mati / di bawah 200 RPM
+    rawRpm = 0;
+  } else if (currentInterval > 0) {
+    rawRpm = (60000000.0 / currentInterval) / RPM_DIVIDER;
+  }
+
+  // 2. FILTERING (EMA - Exponential Moving Average)
+  // Menjadikan jarum smooth tanpa Median Filter yang berat
+  smoothedRpm = (smoothedRpm * smoothingFactor) + (rawRpm * (1.0 - smoothingFactor));
+
+  // 3. LOGIKA QUICK SHIFTER
+  if (digitalRead(PIN_SHIFT_SENSOR) == LOW) {
+    if ((int)smoothedRpm >= minRpmActive) {
+      executeKill();
+    }
+  }
+
+  // 4. TERIMA SETTING DARI APLIKASI (Non-Blocking)
+  if (btSerial.available() > 0) {
+    static String inputString = "";
+    char inChar = (char)btSerial.read();
+    if (inChar == '\n' || inChar == '\r') {
+      if (inputString.startsWith("S")) {
+        parseSettings(inputString);
+      }
+      inputString = "";
+    } else {
+      inputString += inChar;
+    }
+  }
+
+  // 5. KIRIM DATA KE HP (SETIAP 100ms)
   static unsigned long lastSend = 0;
-  if (now - lastSend >= 100) {
-    float raw = getRpm();
-    
-    // Auto-smooth sederhana di sisi arduino
-    smoothedRpm = (smoothedRpm * 0.5) + (raw * 0.5);
-    
-    // Gabungkan blok yang anda sarankan
+  if (millis() - lastSend > 100) {
     btSerial.print("RPM:");
-    btSerial.print((int)(smoothedRpm * conf.rpmDivider));
-    btSerial.println(); 
+    btSerial.println((int)(smoothedRpm * rpmCalibration));
+    lastSend = millis();
+  }
+}
+
+// FUNGSI INTERRUPT RPM (Sangat Cepat)
+void rpmPulse() {
+  unsigned long now = micros();
+  unsigned long interval = now - lastPulseTime;
+  if (interval > DEBOUNCE_RPM) {
+    pulseInterval = interval;
+    lastPulseTime = now;
+  }
+}
+
+// FUNGSI EKSEKUSI POTONG MESIN (KILL)
+void executeKill() {
+  int killTime = tableKill[0]; // Default
+  int rpmNow = (int)smoothedRpm;
+
+  // Cek tabel untuk durasi kill berdasarkan RPM
+  if (rpmNow >= tableRpm[3]) killTime = tableKill[3];
+  else if (rpmNow >= tableRpm[2]) killTime = tableKill[2];
+  else if (rpmNow >= tableRpm[1]) killTime = tableKill[1];
+
+  if (killTime > 0) {
+    digitalWrite(PIN_KILL_OUT, HIGH);
+    delay(killTime); 
+    digitalWrite(PIN_KILL_OUT, LOW);
     
-    // Debug ke USB
-    Serial.print("RPM_CAL:");
-    Serial.println((int)(smoothedRpm * conf.rpmDivider));
+    // Kirim notifikasi ke HP bahwa QS aktif
+    btSerial.print("QS_EVENT:");
+    btSerial.println(killTime);
     
-    lastSend = now;
-  }
-
-  // 2. LOGIKA QUICK SHIFTER
-  if (digitalRead(qsPin) == LOW) {
-    float currentRpm = smoothedRpm * conf.rpmDivider;
-    if (currentRpm >= conf.minRpm) {
-      int timeToCut = getKillTime(currentRpm);
-      digitalWrite(relayPin, HIGH); 
-      delay(timeToCut);
-      digitalWrite(relayPin, LOW);  
-      
-      btSerial.print("QS_EVENT:");
-      btSerial.println(timeToCut);
-      
-      delay(400); 
-    }
-  }
-
-  // 3. TERIMA PENGATURAN (Sesuai Protocol App Flutter)
-  if (btSerial.available()) {
-    String data = btSerial.readStringUntil('\n');
-    data.trim();
-    if (data.length() > 0) {
-      if (data.startsWith("S")) {
-        parseSettings(data);
-      }
-    }
+    delay(300); // Proteksi agar tidak double-kill (debounce sensor kopling)
   }
 }
 
-void handleRpmInterrupt() {
-  unsigned long m = micros();
-  unsigned long duration = m - lastMicros;
-  if (duration > 300) { // Anti noise sampai 14.000+ RPM
-    intervals[intervalIdx] = duration;
-    intervalIdx = (intervalIdx + 1) % 5;
-    lastMicros = m;
-  }
-}
-
-float getRpm() {
-  unsigned long sorted[5];
-  
-  // Ambil data dengan aman dari interrupt
-  uint8_t oldSREG = SREG;
-  cli();
-  for (int i = 0; i < 5; i++) sorted[i] = intervals[i];
-  SREG = oldSREG;
-
-  // Sorting Median
-  for (int i = 0; i < 4; i++) {
-    for (int j = i + 1; j < 5; j++) {
-      if (sorted[i] > sorted[j]) {
-        unsigned long t = sorted[i]; sorted[i] = sorted[j]; sorted[j] = t;
-      }
-    }
-  }
-  
-  // Jika mesin mati > 0.4 detik (2500 RPM min)
-  if (micros() - lastMicros > 400000) return 0;
-
-  unsigned long med = sorted[2]; 
-  if (med == 0) return 0;
-  
-  // Hitung RPM RAW (Hz base)
-  return (60000000.0 / (float)med); 
-}
-
-int getKillTime(float rpm) {
-  // Ambil dari tabel yang dikirimkan aplikasi
-  if (rpm < (float)conf.tableRpm[1]) return conf.tableKill[0];
-  if (rpm < (float)conf.tableRpm[2]) return conf.tableKill[1];
-  if (rpm < (float)conf.tableRpm[3]) return conf.tableKill[2];
-  return conf.tableKill[3];
-}
-
+// FUNGSI PARSING DATA SETTING DARI HP
 void parseSettings(String data) {
-  // Protocol: S[minRpmActive],[rpmCalibration],[tableRpm0],[tableKill0],[tableRpm1],[tableKill1],[tableRpm2],[tableKill2],[tableRpm3],[tableKill3]
-  
-  int commaIndex[10];
+  data.remove(0, 1); // Buang huruf 'S'
+  char str[120];
+  data.toCharArray(str, 120);
   int count = 0;
-  for (int i = 0; i < (int)data.length() && count < 10; i++) {
-    if (data[i] == ',') {
-      commaIndex[count++] = i;
-    }
-  }
-
-  if (count >= 9) {
-    conf.minRpm = data.substring(1, commaIndex[0]).toFloat();
-    conf.rpmDivider = data.substring(commaIndex[0] + 1, commaIndex[1]).toFloat();
-    
-    conf.tableRpm[0] = data.substring(commaIndex[1] + 1, commaIndex[2]).toInt();
-    conf.tableKill[0] = data.substring(commaIndex[2] + 1, commaIndex[3]).toInt();
-    
-    conf.tableRpm[1] = data.substring(commaIndex[3] + 1, commaIndex[4]).toInt();
-    conf.tableKill[1] = data.substring(commaIndex[4] + 1, commaIndex[5]).toInt();
-    
-    conf.tableRpm[2] = data.substring(commaIndex[5] + 1, commaIndex[6]).toInt();
-    conf.tableKill[2] = data.substring(commaIndex[6] + 1, commaIndex[7]).toInt();
-    
-    conf.tableRpm[3] = data.substring(commaIndex[7] + 1, commaIndex[8]).toInt();
-    conf.tableKill[3] = data.substring(commaIndex[8] + 1).toInt();
-    
-    conf.magicNumber = 1337;
-    EEPROM.put(0, conf);
-    btSerial.println("SUCCESS_SAVE");
-  } else {
-    btSerial.println("ERROR_PARSING");
+  char* ptr = strtok(str, ",");
+  while (ptr != NULL && count < 10) {
+    if (count == 0) minRpmActive = atoi(ptr);
+    else if (count == 1) rpmCalibration = atof(ptr);
+    else if (count == 2) tableRpm[0] = atoi(ptr);
+    else if (count == 3) tableKill[0] = atoi(ptr);
+    else if (count == 4) tableRpm[1] = atoi(ptr);
+    else if (count == 5) tableKill[1] = atoi(ptr);
+    else if (count == 6) tableRpm[2] = atoi(ptr);
+    else if (count == 7) tableKill[2] = atoi(ptr);
+    else if (count == 8) tableRpm[3] = atoi(ptr);
+    else if (count == 9) tableKill[3] = atoi(ptr);
+    ptr = strtok(NULL, ",");
+    count++;
   }
 }
 
-void loadConfig() {
-  EEPROM.get(0, conf);
-  if (conf.magicNumber != 1337) { 
-    conf.minRpm = 3000;
-    conf.rpmDivider = 1.15;
-    
-    conf.tableRpm[0] = 6000;  conf.tableKill[0] = 70;
-    conf.tableRpm[1] = 9000;  conf.tableKill[1] = 65;
-    conf.tableRpm[2] = 11500; conf.tableKill[2] = 75;
-    conf.tableRpm[3] = 12000; conf.tableKill[3] = 80;
-    
-    conf.magicNumber = 1337;
-    EEPROM.put(0, conf);
-  }
-}
