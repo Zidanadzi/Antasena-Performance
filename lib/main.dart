@@ -1470,7 +1470,6 @@ class _TuningPageState extends State<TuningPage> {
   @override
   Widget build(BuildContext context) {
     final state = context.watch<AppState>();
-    const Color accentColor = Color(0xFF00E676);
 
     return Scaffold(
       backgroundColor: Colors.black,
