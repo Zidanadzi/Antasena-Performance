@@ -49,6 +49,7 @@ class AppState extends ChangeNotifier {
   bool _isConnected = false;
   bool _isScanning = false;
   bool _isConnecting = false;
+  bool _isSynced = false;
   String? _deviceName;
   String? _connectionError;
   classic.BluetoothConnection? _classicConnection;
@@ -103,6 +104,7 @@ class AppState extends ChangeNotifier {
   List<int> get tableRpm => _tableRpm;
   List<int> get tableKill => _tableKill;
   bool get isConnected => _isConnected;
+  bool get isSynced => _isSynced;
   bool get isScanning => _isScanning;
   bool get isConnecting => _isConnecting;
   String? get deviceName => _deviceName;
@@ -444,9 +446,19 @@ class AppState extends ChangeNotifier {
               }
             }
 
-            // Quick Shifter / Shift Light Signals
+            // Shift Light / Sync Signals
             if (msg.contains('QS_EVENT') || msg.contains('SHIFT!')) {
               triggerShiftNotification();
+            }
+
+            if (msg.contains('OK:SYNCED_MODULE')) {
+              _isSynced = true;
+              notifyListeners();
+              // Reset synced status after 3 seconds for visual feedback next time
+              Timer(const Duration(seconds: 3), () {
+                _isSynced = false;
+                notifyListeners();
+              });
             }
           }
           notifyListeners();
@@ -1554,13 +1566,15 @@ class _TuningPageState extends State<TuningPage> {
 
   Widget _buildCompactSyncIndicator(AppState state) {
     bool connected = state.isConnected;
+    bool synced = state.isSynced;
+    
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         color: const Color(0xFF070707),
         borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: Colors.white.withOpacity(0.05)),
+        border: Border.all(color: synced ? const Color(0xFF00E676).withOpacity(0.3) : Colors.white.withOpacity(0.05)),
       ),
       child: Row(
         children: [
@@ -1569,10 +1583,10 @@ class _TuningPageState extends State<TuningPage> {
             height: 8,
             decoration: BoxDecoration(
               shape: BoxShape.circle,
-              color: connected ? const Color(0xFF00E676) : Colors.red,
+              color: synced ? const Color(0xFF00E676) : (connected ? const Color(0xFF00E676).withOpacity(0.5) : Colors.red),
               boxShadow: [
                 BoxShadow(
-                  color: (connected ? const Color(0xFF00E676) : Colors.red).withOpacity(0.4),
+                  color: (synced ? const Color(0xFF00E676) : (connected ? const Color(0xFF00E676).withOpacity(0.5) : Colors.red)).withOpacity(0.4),
                   blurRadius: 8,
                   spreadRadius: 2,
                 )
@@ -1585,26 +1599,26 @@ class _TuningPageState extends State<TuningPage> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  connected ? "SYNCHRONIZED WITH MODULE" : "WAITING FOR MODULE",
+                  synced ? "SETTINGS SYNCED SUCCESSFULLY" : (connected ? "SYNCHRONIZED WITH MODULE" : "WAITING FOR MODULE"),
                   style: GoogleFonts.jetBrainsMono(
                     fontSize: 10,
                     fontWeight: FontWeight.bold,
-                    color: connected ? Colors.white : Colors.white24,
+                    color: synced ? const Color(0xFF00E676) : (connected ? Colors.white : Colors.white24),
                   ),
                 ),
                 if (connected)
                   Padding(
                     padding: const EdgeInsets.only(top: 4.0),
                     child: Text(
-                      "BT CLASSIQ • 9600 BAUD • ${state.totalBytesReceived} BYTES RX",
-                      style: const TextStyle(fontSize: 7, color: Colors.white10, fontWeight: FontWeight.bold),
+                      synced ? "MODULE ACKNOWLEDGED NEW PARAMETERS" : "BT CLASSIQ • 9600 BAUD • ${state.totalBytesReceived} BYTES RX",
+                      style: TextStyle(fontSize: 7, color: synced ? const Color(0xFF00E676).withOpacity(0.3) : Colors.white10, fontWeight: FontWeight.bold),
                     ),
                   ),
               ],
             ),
           ),
           if (connected)
-            const Icon(Icons.bolt, color: Color(0xFF00E676), size: 14),
+            Icon(synced ? Icons.check_circle : Icons.bolt, color: const Color(0xFF00E676), size: 14),
         ],
       ),
     );
