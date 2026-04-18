@@ -1179,12 +1179,13 @@ class DashboardPage extends StatelessWidget {
       backgroundColor: const Color(0xFF0A0A0A),
       isScrollControlled: true,
       shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
-      builder: (context) => DraggableScrollableSheet(
-        initialChildSize: 0.6,
-        maxChildSize: 0.9,
-        minChildSize: 0.4,
-        expand: false,
-        builder: (context, scrollController) => Container(
+      builder: (context) => Consumer<AppState>(
+        builder: (context, state, child) => DraggableScrollableSheet(
+          initialChildSize: 0.6,
+          maxChildSize: 0.9,
+          minChildSize: 0.4,
+          expand: false,
+          builder: (context, scrollController) => Container(
           padding: const EdgeInsets.all(24),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -1334,12 +1335,13 @@ class DashboardPage extends StatelessWidget {
           ),
         ),
       ),
-    );
+    ),
+  );
 
     // Start scan after sheet is shown to avoid build conflicts
     Future.delayed(const Duration(milliseconds: 300), () {
-      if (!state.isConnected) {
-        state.startClassicScan();
+      if (!initialState.isConnected) {
+        initialState.startClassicScan();
       }
     });
   }
