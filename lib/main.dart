@@ -1173,7 +1173,7 @@ class DashboardPage extends StatelessWidget {
     );
   }
 
-  void _showBluetoothScanner(BuildContext context, AppState state) {
+  void _showBluetoothScanner(BuildContext context, AppState initialState) {
     showModalBottomSheet(
       context: context,
       backgroundColor: const Color(0xFF0A0A0A),
