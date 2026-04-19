@@ -1174,8 +1174,6 @@ class DashboardPage extends StatelessWidget {
                 child: Row(
                   mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                   children: [
-                    _buildCompactStatItem('DIVIDER', state.rpmDivider.toStringAsFixed(1), 'DIV', isShiftPoint, accentColor),
-                    _buildCompactDivider(isShiftPoint),
                     _buildCompactStatItem('CALIBRATION', state.rpmCalibration.toStringAsFixed(1), 'X', isShiftPoint, accentColor),
                     _buildCompactDivider(isShiftPoint),
                     _buildCompactStatItem('MIN RPM', state.minRpmActive.round().toString(), 'RPM', isShiftPoint, accentColor),
@@ -1641,26 +1639,13 @@ class _TuningPageState extends State<TuningPage> {
             _buildSectionHeader('QUICKSHIFTER CONFIG'),
             const SizedBox(height: 20),
             
-            GestureDetector(
-              onTap: () => _showEditDialog(context, 'MINIMUM RPM', state.minRpmActive.round().toString(), (val) {
-                state.setMinRpm(double.tryParse(val) ?? 3000);
-              }),
-              child: _buildStealthTuningCard('MINIMUM RPM', state.minRpmActive.round().toString(), 'RPM'),
-            ),
+            _buildStealthTuningCard('MINIMUM RPM', state.minRpmActive.round().toString(), 'RPM', onTap: () => _showEditDialog(context, 'MINIMUM RPM', state.minRpmActive.round().toString(), (val) {
+              state.setMinRpm(double.tryParse(val) ?? 3000);
+            })),
             const SizedBox(height: 16),
-            GestureDetector(
-              onTap: () => _showEditDialog(context, 'RPM CALIBRATION', state.rpmCalibration.toString(), (val) {
-                state.setRpmCalibration(double.tryParse(val) ?? 1.0);
-              }),
-              child: _buildStealthTuningCard('RPM CALIBRATION', state.rpmCalibration.toString(), 'X'),
-            ),
-            const SizedBox(height: 16),
-            GestureDetector(
-              onTap: () => _showEditDialog(context, 'RPM DIVIDER', state.rpmDivider.toString(), (val) {
-                state.setRpmDivider(double.tryParse(val) ?? 1.0);
-              }),
-              child: _buildStealthTuningCard('RPM DIVIDER', state.rpmDivider.toString(), 'DIV'),
-            ),
+            _buildStealthTuningCard('RPM CALIBRATION', state.rpmCalibration.toString(), 'X', onTap: () => _showEditDialog(context, 'RPM CALIBRATION', state.rpmCalibration.toString(), (val) {
+              state.setRpmCalibration(double.tryParse(val) ?? 1.0);
+            })),
             const SizedBox(height: 16),
             _buildStealthSmoothingSelector(state),
             
@@ -1771,50 +1756,53 @@ class _TuningPageState extends State<TuningPage> {
     );
   }
 
-  Widget _buildStealthTuningCard(String label, String value, String unit) {
-    return AnimatedContainer(
-      duration: const Duration(milliseconds: 200),
-      padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(
-        color: const Color(0xFF0A0A0A),
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: Colors.white.withOpacity(0.08)),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.5),
-            blurRadius: 10,
-            offset: const Offset(0, 4),
-          ),
-        ],
-      ),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(label, style: TextStyle(color: Colors.white.withOpacity(0.3), fontSize: 8, fontWeight: FontWeight.bold, letterSpacing: 1)),
-              const SizedBox(height: 8),
-              Row(
-                crossAxisAlignment: CrossAxisAlignment.baseline,
-                textBaseline: TextBaseline.alphabetic,
-                children: [
-                  Text(value, style: GoogleFonts.jetBrainsMono(fontSize: 32, fontWeight: FontWeight.bold, color: Colors.white)),
-                  const SizedBox(width: 6),
-                  Text(unit, style: TextStyle(color: Colors.white.withOpacity(0.1), fontSize: 10, fontWeight: FontWeight.bold)),
-                ],
-              ),
-            ],
-          ),
-          Container(
-            padding: const EdgeInsets.all(8),
-            decoration: BoxDecoration(
-              color: Colors.white.withOpacity(0.03),
-              shape: BoxShape.circle,
+  Widget _buildStealthTuningCard(String label, String value, String unit, {VoidCallback? onTap, bool isLocked = false}) {
+    return GestureDetector(
+      onTap: isLocked ? null : onTap,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 200),
+        padding: const EdgeInsets.all(20),
+        decoration: BoxDecoration(
+          color: const Color(0xFF0A0A0A),
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(color: isLocked ? Colors.blue.withOpacity(0.2) : Colors.white.withOpacity(0.08)),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withOpacity(0.5),
+              blurRadius: 10,
+              offset: const Offset(0, 4),
             ),
-            child: const Icon(Icons.tune, size: 20, color: Color(0xFF00E676)),
-          ),
-        ],
+          ],
+        ),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(label, style: TextStyle(color: isLocked ? Colors.blue.withOpacity(0.5) : Colors.white.withOpacity(0.3), fontSize: 8, fontWeight: FontWeight.bold, letterSpacing: 1)),
+                const SizedBox(height: 8),
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.baseline,
+                  textBaseline: TextBaseline.alphabetic,
+                  children: [
+                    Text(value, style: GoogleFonts.jetBrainsMono(fontSize: 32, fontWeight: FontWeight.bold, color: isLocked ? Colors.blue.shade100 : Colors.white)),
+                    const SizedBox(width: 6),
+                    Text(unit, style: TextStyle(color: Colors.white.withOpacity(0.1), fontSize: 10, fontWeight: FontWeight.bold)),
+                  ],
+                ),
+              ],
+            ),
+            Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: Colors.white.withOpacity(0.03),
+                shape: BoxShape.circle,
+              ),
+              child: Icon(isLocked ? Icons.lock_outline : Icons.tune, size: 20, color: isLocked ? Colors.blue : const Color(0xFF00E676)),
+            ),
+          ],
+        ),
       ),
     );
   }
