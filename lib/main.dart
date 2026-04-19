@@ -43,7 +43,7 @@ class AppState extends ChangeNotifier {
   double _rpmDivider = 11.66; // Adjustable RPM Divider
   double _rpmCalibration = 1.0; 
   List<int> _tableRpm = [3000, 6000, 9000, 12000];
-  List<int> _tableKill = [70, 65, 75, 80]; // Updated defaults
+  List<int> _tableKill = [70, 65, 60, 55]; // User requested racing defaults
   
   // Connection
   bool _isConnected = false;

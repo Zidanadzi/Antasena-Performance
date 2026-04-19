@@ -51,8 +51,8 @@ void loadSettings() {
     config.rpmDivider = 11.66; 
     config.tableRpm[0]=3000; config.tableRpm[1]=6000;
     config.tableRpm[2]=9000; config.tableRpm[3]=12000;
-    config.tableKill[0]=110; config.tableKill[1]=100; 
-    config.tableKill[2]=90;  config.tableKill[3]=80;
+    config.tableKill[0]=70; config.tableKill[1]=65; 
+    config.tableKill[2]=60; config.tableKill[3]=55;
     config.magic = EEPROM_MAGIC;
     EEPROM.put(0, config);
   }
