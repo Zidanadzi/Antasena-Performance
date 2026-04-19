@@ -1,178 +1,146 @@
+/* 
+ * ANTASENA PERFORMANCE - FINAL VERSION (MOTIF FIXED)
+ * Baud: 38400 | Filter: 14.000 RPM (Threshold 368us) | Divider: 11.66
+ * Smoothing Arduino: 0.7 (Fast) | App Smoothing: Adjustable
+ */
+
 #include <SoftwareSerial.h>
 #include <EEPROM.h>
 
-// --- PROTOTYPE FUNGSI ---
-void rpmPulse();
-void executeKill();
-void parseSettings(String data);
-void saveSettings();
-void loadSettings();
+#define PIN_SENSOR_QS 2  
+#define PIN_PULSER    3  
+#define BT_RX         8   
+#define BT_TX         9   
+#define PIN_KILL_OUT  10 
 
-// SETTINGS STRUCT (Untuk EEPROM)
+SoftwareSerial bt(BT_RX, BT_TX);
+
 struct UserSettings {
   int minRpmActive;
   float rpmCalibration;
   float rpmDivider;
   int tableRpm[4];
   int tableKill[4];
-  uint32_t magic; // Penanda bahwa EEPROM sudah pernah diisi
+  unsigned long magic;
 };
 
 UserSettings config;
-const uint32_t EEPROM_MAGIC = 0xABCD1234;
+const unsigned long EEPROM_MAGIC = 0xABCD1234;
 
-// 1. PIN CONFIGURATION
-const int PIN_SHIFT_SENSOR = 2; // Sensor Quick Shifter (Proximity)
-const int PIN_PULSER = 3;       // Sinyal RPM (Pulser/Koil)
-const int PIN_KILL_OUT = 10;    // Output ke Relay/Coil Kill
-SoftwareSerial btSerial(9, 8);  // Bluetooth: 9=RX, 8=TX
-
-// 2. DATA FILTERING & CALIBRATION
-const int DEBOUNCE_RPM = 350;     // Noise protection (us)
-float smoothedRpm = 0;
-float smoothingFactor = 0.85;     // Smoothness factor
-
-// 4. VOLATILE VARIABLES FOR RPM INTERRUPT
-volatile unsigned long lastPulseTime = 0;
 volatile unsigned long pulseInterval = 0;
+volatile unsigned long lastPulseTime = 0;
+float filteredRpm = 0;
+unsigned long lastSend = 0;
+bool lastSensorState = HIGH;
 
-void setup() {
-  sei(); // Aktifkan global interrupt
-  
-  loadSettings(); // Ambil data dari EEPROM (Jika ada)
-  
-  delay(3000); // Tunggu Bluetooth siap
-  btSerial.begin(9600);
-  
-  pinMode(PIN_PULSER, INPUT_PULLUP);
-  pinMode(PIN_SHIFT_SENSOR, INPUT_PULLUP);
-  pinMode(PIN_KILL_OUT, OUTPUT);
-  digitalWrite(PIN_KILL_OUT, LOW);
-  
-  // Interrupt pada Pin 3 (Pulser)
-  attachInterrupt(digitalPinToInterrupt(PIN_PULSER), rpmPulse, FALLING);
-}
-
-void loop() {
-  unsigned long now = micros();
-  unsigned long currentInterval = pulseInterval;
-
-  // 1. PENGHITUNGAN RPM
-  float rawRpm = 0;
-  if (now - lastPulseTime > 300000) { 
-    rawRpm = 0;
-  } else if (currentInterval > 0) {
-    rawRpm = (60000000.0 / currentInterval) / config.rpmDivider;
-  }
-
-  // 2. FILTERING RPM (EMA)
-  smoothedRpm = (smoothedRpm * smoothingFactor) + (rawRpm * (1.0 - smoothingFactor));
-
-  // 3. LOGIKA QUICK SHIFTER
-  if (digitalRead(PIN_SHIFT_SENSOR) == LOW) {
-    if ((int)smoothedRpm >= config.minRpmActive) {
-      executeKill();
-    }
-  }
-
-  // 4. TERIMA DATA SETTING DARI APLIKASI
-  if (btSerial.available() > 0) {
-    static String inputString = "";
-    char inChar = (char)btSerial.read();
-    if (inChar == '\n' || inChar == '\r') {
-      if (inputString.startsWith("S")) {
-        parseSettings(inputString);
-        saveSettings(); // Simpan ke EEPROM setelah perubahan
-        btSerial.println("OK:SYNCED_MODULE");
-      }
-      inputString = "";
-    } else {
-      inputString += inChar;
-    }
-  }
-
-  // 5. KIRIM RPM KE DASHBOARD (SETIAP 100ms)
-  static unsigned long lastSend = 0;
-  if (millis() - lastSend > 100) {
-    btSerial.print("RPM:");
-    btSerial.println((int)(smoothedRpm * config.rpmCalibration));
-    lastSend = millis();
-  }
-}
-
-// 6. FUNGSI INTERRUPT RPM
-void rpmPulse() {
+// --- FILTER 14.000 RPM (Threshold 368us) ---
+void rpmISR() {
   unsigned long now = micros();
   unsigned long interval = now - lastPulseTime;
-  if (interval > DEBOUNCE_RPM) {
+  if (interval > 368) { 
     pulseInterval = interval;
     lastPulseTime = now;
   }
 }
 
-// 7. FUNGSI EKSEKUSI POTONG MESIN (KILL)
-void executeKill() {
-  int killTime = config.tableKill[0];
-  int rpmNow = (int)smoothedRpm;
-
-  if (rpmNow >= config.tableRpm[3]) killTime = config.tableKill[3];
-  else if (rpmNow >= config.tableRpm[2]) killTime = config.tableKill[2];
-  else if (rpmNow >= config.tableRpm[1]) killTime = config.tableKill[1];
-
-  if (killTime > 0) {
-    digitalWrite(PIN_KILL_OUT, HIGH); 
-    delay(killTime); 
-    digitalWrite(PIN_KILL_OUT, LOW);  
-    
-    // Kirim notifikasi ke HP
-    btSerial.print("QS_EVENT:");
-    btSerial.println(killTime);
-    
-    delay(300); // Proteksi double-kill
-  }
-}
-
-// 8. FUNGSI PARSING DATA SETTING (11 PARAMETER)
-void parseSettings(String data) {
-  data.remove(0, 1); // Buang huruf 'S'
-  char str[120];
-  data.toCharArray(str, 120);
-  int count = 0;
-  char* ptr = strtok(str, ",");
-  while (ptr != NULL && count < 11) {
-    if (count == 0) config.minRpmActive = atoi(ptr);
-    else if (count == 1) config.rpmCalibration = atof(ptr);
-    else if (count == 2) config.rpmDivider = atof(ptr);
-    else if (count == 3) config.tableRpm[0] = atoi(ptr);
-    else if (count == 4) config.tableKill[0] = atoi(ptr);
-    else if (count == 5) config.tableRpm[1] = atoi(ptr);
-    else if (count == 6) config.tableKill[1] = atoi(ptr);
-    else if (count == 7) config.tableRpm[2] = atoi(ptr);
-    else if (count == 8) config.tableKill[2] = atoi(ptr);
-    else if (count == 9) config.tableRpm[3] = atoi(ptr);
-    else if (count == 10) config.tableKill[3] = atoi(ptr);
-    ptr = strtok(NULL, ",");
-    count++;
-  }
-}
-
-void saveSettings() {
-  config.magic = EEPROM_MAGIC;
-  EEPROM.put(0, config);
-}
-
 void loadSettings() {
   EEPROM.get(0, config);
-  // Jika belum ada data (Magic tidak cocok), pakai default
   if (config.magic != EEPROM_MAGIC) {
     config.minRpmActive = 3000;
     config.rpmCalibration = 1.0;
-    config.rpmDivider = 11.66;
-    int rpmDefs[4] = {3000, 6000, 9000, 12000};
-    int killDefs[4] = {90, 80, 70, 60};
-    for(int i=0; i<4; i++) {
-      config.tableRpm[i] = rpmDefs[i];
-      config.tableKill[i] = killDefs[i];
-    }
+    config.rpmDivider = 11.66; 
+    config.tableRpm[0]=3000; config.tableRpm[1]=6000;
+    config.tableRpm[2]=9000; config.tableRpm[3]=12000;
+    config.tableKill[0]=110; config.tableKill[1]=100; 
+    config.tableKill[2]=90;  config.tableKill[3]=80;
+    config.magic = EEPROM_MAGIC;
+    EEPROM.put(0, config);
+  }
+}
+
+void handleSync(String data) {
+  data.remove(0, 1);
+  char str[128];
+  data.toCharArray(str, 128);
+  int i = 0;
+  char* p = strtok(str, ",");
+  while (p != NULL && i < 11) {
+    if (i == 0)      config.minRpmActive   = atoi(p);
+    else if (i == 1) config.rpmCalibration = atof(p);
+    else if (i == 2) config.rpmDivider     = atof(p);
+    else if (i == 3) config.tableRpm[0]    = atoi(p);
+    else if (i == 4) config.tableKill[0]   = atoi(p);
+    else if (i == 5) config.tableRpm[1]    = atoi(p);
+    else if (i == 6) config.tableKill[1]   = atoi(p);
+    else if (i == 7) config.tableRpm[2]    = atoi(p);
+    else if (i == 8) config.tableKill[2]   = atoi(p);
+    else if (i == 9) config.tableRpm[3]    = atoi(p);
+    else if (i == 10) config.tableKill[3]   = atoi(p);
+    p = strtok(NULL, ",");
+    i++;
+  }
+  if (config.rpmDivider <= 0) config.rpmDivider = 11.66;
+  EEPROM.put(0, config);
+  bt.println("OK:SYNCED_MODULE");
+}
+
+void setup() {
+  loadSettings();
+  pinMode(PIN_PULSER, INPUT_PULLUP);
+  pinMode(PIN_SENSOR_QS, INPUT_PULLUP);
+  pinMode(PIN_KILL_OUT, OUTPUT);
+  digitalWrite(PIN_KILL_OUT, LOW);
+  bt.begin(38400); 
+  attachInterrupt(digitalPinToInterrupt(PIN_PULSER), rpmISR, FALLING);
+  bt.println("OK:ANTASENA_READY");
+}
+
+void loop() {
+  unsigned long now = micros();
+  noInterrupts();
+  unsigned long snapInt = pulseInterval;
+  unsigned long snapLast = lastPulseTime;
+  interrupts();
+
+  float rawRpm = 0;
+  if (now - snapLast > 450000) rawRpm = 0;
+  else if (snapInt > 0) {
+    rawRpm = (60000000.0 / snapInt) / config.rpmDivider;
+  }
+
+  if (rawRpm > 0) {
+      filteredRpm = (filteredRpm * 0.7) + (rawRpm * 0.3);
+  } else {
+      filteredRpm = 0; 
+  }
+
+  bool currentState = digitalRead(PIN_SENSOR_QS);
+  if (currentState == LOW && lastSensorState == HIGH) {
+      if ((int)filteredRpm >= config.minRpmActive) {
+          int kTime = config.tableKill[0];
+          if ((int)filteredRpm >= config.tableRpm[3])      kTime = config.tableKill[3];
+          else if ((int)filteredRpm >= config.tableRpm[2]) kTime = config.tableKill[2];
+          else if ((int)filteredRpm >= config.tableRpm[1]) kTime = config.tableKill[1];
+          
+          digitalWrite(PIN_KILL_OUT, HIGH);
+          delay(kTime);
+          digitalWrite(PIN_KILL_OUT, LOW);
+          bt.print("QS_EVENT:"); bt.println(kTime);
+          delay(400); 
+      }
+  }
+  lastSensorState = currentState;
+
+  if (millis() - lastSend > 130) {
+    lastSend = millis();
+    int out = (int)(filteredRpm * config.rpmCalibration);
+    bt.print("RPM:");
+    bt.println(out < 0 ? 0 : out);
+  }
+
+  if (bt.available()) {
+    String in = bt.readStringUntil('\n');
+    in.trim();
+    if (in.startsWith("S")) handleSync(in);
   }
 }

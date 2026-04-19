@@ -668,7 +668,7 @@ class AppState extends ChangeNotifier {
   void triggerShiftNotification() {
     _isShiftActive = true;
     _shiftNotifyTimer?.cancel();
-    _shiftNotifyTimer = Timer(const Duration(milliseconds: 500), () {
+    _shiftNotifyTimer = Timer(const Duration(milliseconds: 200), () {
       _isShiftActive = false;
       notifyListeners();
     });
