@@ -834,10 +834,124 @@ class AntasenaApp extends StatelessWidget {
           surface: Color(0xFF1A1A1A),
         ),
       ),
-      home: const MainNavigation(),
+      home: const SplashScreen(),
       routes: {
         '/design_showcase': (context) => const DesignShowcasePage(),
       },
+    );
+  }
+}
+
+class SplashScreen extends StatefulWidget {
+  const SplashScreen({super.key});
+
+  @override
+  State<SplashScreen> createState() => _SplashScreenState();
+}
+
+class _SplashScreenState extends State<SplashScreen> {
+  @override
+  void initState() {
+    super.initState();
+    Future.delayed(const Duration(seconds: 3), () {
+      if (mounted) {
+        Navigator.of(context).pushReplacement(
+          PageRouteBuilder(
+            pageBuilder: (context, animation, secondaryAnimation) => const MainNavigation(),
+            transitionsBuilder: (context, animation, secondaryAnimation, child) {
+              return FadeTransition(opacity: animation, child: child);
+            },
+            transitionDuration: const Duration(milliseconds: 800),
+          ),
+        );
+      }
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: const Color(0xFF0A0A0A),
+      body: Stack(
+        children: [
+          // Background subtle pattern
+          Positioned.fill(
+            child: Opacity(
+              opacity: 0.03,
+              child: Image.network(
+                'https://picsum.photos/seed/carbon/1920/1080',
+                fit: BoxFit.cover,
+                referrerPolicy: ReferrerPolicy.noReferrer,
+              ),
+            ),
+          ),
+          Center(
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Hero(
+                  tag: 'app_logo',
+                  child: Column(
+                    children: [
+                      Text(
+                        'ANTASENA',
+                        style: GoogleFonts.exo2(
+                          fontSize: 42,
+                          fontWeight: FontWeight.w900,
+                          fontStyle: FontStyle.italic,
+                          letterSpacing: 10,
+                          color: Colors.white,
+                        ),
+                      ),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFF00E676),
+                          borderRadius: BorderRadius.circular(2),
+                        ),
+                        child: Text(
+                          'PERFORMANCE',
+                          style: GoogleFonts.jetBrainsMono(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w900,
+                            letterSpacing: 8,
+                            color: Colors.black,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 60),
+                const SizedBox(
+                  width: 100,
+                  height: 1,
+                  child: LinearProgressIndicator(
+                    backgroundColor: Colors.white10,
+                    color: Color(0xFF00E676),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          Positioned(
+            bottom: 40,
+            left: 0,
+            right: 0,
+            child: Center(
+              child: Text(
+                'V1.0.4 STABLE BUILD',
+                style: GoogleFonts.jetBrainsMono(
+                  fontSize: 8,
+                  fontWeight: FontWeight.bold,
+                  color: Colors.white.withOpacity(0.2),
+                  letterSpacing: 2,
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
     );
   }
 }
