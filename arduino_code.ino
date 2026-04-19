@@ -1,7 +1,8 @@
 /* 
- * ANTASENA PERFORMANCE - FINAL VERSION (MOTIF FIXED)
- * Baud: 38400 | Filter: 14.000 RPM (Threshold 368us) | Divider: 11.66
- * Smoothing Arduino: 0.7 (Fast) | App Smoothing: Adjustable
+ * ANTASENA PERFORMANCE - ULTRA STABLE VERSION
+ * Fitur: Bi-Directional Glitch Filter (Anti-Drop & Anti-Spike)
+ * Racing Kill Time: 70, 65, 60, 55 ms
+ * Baud Rate: 38400 | Divider: 11.66
  */
 
 #include <SoftwareSerial.h>
@@ -33,7 +34,6 @@ float filteredRpm = 0;
 unsigned long lastSend = 0;
 bool lastSensorState = HIGH;
 
-// --- FILTER 14.000 RPM (Threshold 368us) ---
 void rpmISR() {
   unsigned long now = micros();
   unsigned long interval = now - lastPulseTime;
@@ -92,7 +92,6 @@ void setup() {
   digitalWrite(PIN_KILL_OUT, LOW);
   bt.begin(38400); 
   attachInterrupt(digitalPinToInterrupt(PIN_PULSER), rpmISR, FALLING);
-  bt.println("OK:ANTASENA_READY");
 }
 
 void loop() {
@@ -103,13 +102,26 @@ void loop() {
   interrupts();
 
   float rawRpm = 0;
-  if (now - snapLast > 450000) rawRpm = 0;
-  else if (snapInt > 0) {
+  if (now - snapLast > 450000) {
+      rawRpm = 0;
+  } else if (snapInt > 0) {
     rawRpm = (60000000.0 / snapInt) / config.rpmDivider;
   }
 
+  // --- ULTRA STABLE FILTER (Bi-Directional) ---
   if (rawRpm > 0) {
-      filteredRpm = (filteredRpm * 0.7) + (rawRpm * 0.3);
+      if (filteredRpm > 500) {
+          // 1. Abaikan anjlok > 40% (Missing Tooth)
+          if (rawRpm < (filteredRpm * 0.6)) {
+              rawRpm = filteredRpm;
+          }
+          // 2. Abaikan lonjakan > 50% (Ignition Noise)
+          else if (rawRpm > (filteredRpm * 1.5)) {
+              rawRpm = filteredRpm;
+          }
+      }
+      // Smoothing Arduino (Faktor 0.8)
+      filteredRpm = (filteredRpm * 0.8) + (rawRpm * 0.2); 
   } else {
       filteredRpm = 0; 
   }
