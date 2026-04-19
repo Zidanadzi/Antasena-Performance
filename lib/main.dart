@@ -881,7 +881,6 @@ class _SplashScreenState extends State<SplashScreen> {
               child: Image.network(
                 'https://picsum.photos/seed/carbon/1920/1080',
                 fit: BoxFit.cover,
-                referrerPolicy: ReferrerPolicy.noReferrer,
               ),
             ),
           ),
