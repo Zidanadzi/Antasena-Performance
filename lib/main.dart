@@ -874,13 +874,18 @@ class _SplashScreenState extends State<SplashScreen> {
       backgroundColor: const Color(0xFF0A0A0A),
       body: Stack(
         children: [
-          // Background subtle pattern
+          // Subtle circular gradient for depth
           Positioned.fill(
-            child: Opacity(
-              opacity: 0.03,
-              child: Image.network(
-                'https://picsum.photos/seed/carbon/1920/1080',
-                fit: BoxFit.cover,
+            child: Container(
+              decoration: BoxDecoration(
+                gradient: RadialGradient(
+                  center: Alignment.center,
+                  radius: 1.2,
+                  colors: [
+                    const Color(0xFF00E676).withOpacity(0.05),
+                    Colors.transparent,
+                  ],
+                ),
               ),
             ),
           ),
@@ -895,23 +900,24 @@ class _SplashScreenState extends State<SplashScreen> {
                       Text(
                         'ANTASENA',
                         style: GoogleFonts.exo2(
-                          fontSize: 42,
+                          fontSize: 48,
                           fontWeight: FontWeight.w900,
                           fontStyle: FontStyle.italic,
-                          letterSpacing: 10,
+                          letterSpacing: 12,
                           color: Colors.white,
                         ),
                       ),
+                      const SizedBox(height: 4),
                       Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
                         decoration: BoxDecoration(
                           color: const Color(0xFF00E676),
-                          borderRadius: BorderRadius.circular(2),
+                          borderRadius: BorderRadius.circular(4),
                         ),
                         child: Text(
                           'PERFORMANCE',
                           style: GoogleFonts.jetBrainsMono(
-                            fontSize: 12,
+                            fontSize: 14,
                             fontWeight: FontWeight.w900,
                             letterSpacing: 8,
                             color: Colors.black,
@@ -921,10 +927,10 @@ class _SplashScreenState extends State<SplashScreen> {
                     ],
                   ),
                 ),
-                const SizedBox(height: 60),
+                const SizedBox(height: 80),
                 const SizedBox(
-                  width: 100,
-                  height: 1,
+                  width: 140,
+                  height: 2,
                   child: LinearProgressIndicator(
                     backgroundColor: Colors.white10,
                     color: Color(0xFF00E676),
@@ -934,18 +940,32 @@ class _SplashScreenState extends State<SplashScreen> {
             ),
           ),
           Positioned(
-            bottom: 40,
+            bottom: 60,
             left: 0,
             right: 0,
             child: Center(
-              child: Text(
-                'V1.0.4 STABLE BUILD',
-                style: GoogleFonts.jetBrainsMono(
-                  fontSize: 8,
-                  fontWeight: FontWeight.bold,
-                  color: Colors.white.withOpacity(0.2),
-                  letterSpacing: 2,
-                ),
+              child: Column(
+                children: [
+                  Text(
+                    'DEVELOPED FOR RACING',
+                    style: GoogleFonts.jetBrainsMono(
+                      fontSize: 10,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.white.withOpacity(0.3),
+                      letterSpacing: 4,
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  Text(
+                    'V1.1.0 STABLE',
+                    style: GoogleFonts.jetBrainsMono(
+                      fontSize: 8,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.white.withOpacity(0.15),
+                      letterSpacing: 2,
+                    ),
+                  ),
+                ],
               ),
             ),
           ),

@@ -1,8 +1,9 @@
 /* 
- * ANTASENA PERFORMANCE - ULTRA STABLE VERSION
- * Fitur: Bi-Directional Glitch Filter (Anti-Drop & Anti-Spike)
+ * ANTASENA PERFORMANCE - STABLE CORE (MEDIAN PRO)
+ * Logic: Fixed Divider 5.5 + Median Filter (Window 3) + Smart Debounce (70%)
+ * Hasil: Menghilangkan lonjakan liar (spike) dan penurunan (drop) secara total.
  * Racing Kill Time: 70, 65, 60, 55 ms
- * Baud Rate: 38400 | Divider: 11.66
+ * Baud Rate: 38400 | Divider: Locked 5.5
  */
 
 #include <SoftwareSerial.h>
@@ -30,25 +31,31 @@ const unsigned long EEPROM_MAGIC = 0xABCD1234;
 
 volatile unsigned long pulseInterval = 0;
 volatile unsigned long lastPulseTime = 0;
+volatile unsigned long lockoutTime = 0; 
 float filteredRpm = 0;
+float rpmBuffer[3] = {0,0,0}; 
+int bufIdx = 0;
 unsigned long lastSend = 0;
 bool lastSensorState = HIGH;
 
+// --- ISR dengan Smart Debounce ---
 void rpmISR() {
   unsigned long now = micros();
-  unsigned long interval = now - lastPulseTime;
-  if (interval > 368) { 
+  if (now > lockoutTime) {
+    unsigned long interval = now - lastPulseTime;
     pulseInterval = interval;
     lastPulseTime = now;
+    // Kunci sinyal selama 70% putaran untuk membuang noise pengapian
+    lockoutTime = now + (interval * 0.70); 
   }
 }
 
 void loadSettings() {
   EEPROM.get(0, config);
+  config.rpmDivider = 5.5; 
   if (config.magic != EEPROM_MAGIC) {
     config.minRpmActive = 3000;
     config.rpmCalibration = 1.0;
-    config.rpmDivider = 11.66; 
     config.tableRpm[0]=3000; config.tableRpm[1]=6000;
     config.tableRpm[2]=9000; config.tableRpm[3]=12000;
     config.tableKill[0]=70; config.tableKill[1]=65; 
@@ -67,7 +74,7 @@ void handleSync(String data) {
   while (p != NULL && i < 11) {
     if (i == 0)      config.minRpmActive   = atoi(p);
     else if (i == 1) config.rpmCalibration = atof(p);
-    else if (i == 2) config.rpmDivider     = atof(p);
+    else if (i == 2) config.rpmDivider     = 5.5; 
     else if (i == 3) config.tableRpm[0]    = atoi(p);
     else if (i == 4) config.tableKill[0]   = atoi(p);
     else if (i == 5) config.tableRpm[1]    = atoi(p);
@@ -79,9 +86,8 @@ void handleSync(String data) {
     p = strtok(NULL, ",");
     i++;
   }
-  if (config.rpmDivider <= 0) config.rpmDivider = 11.66;
   EEPROM.put(0, config);
-  bt.println("OK:SYNCED_MODULE");
+  bt.println("OK:MEDIAN_FILTER_ACTIVE");
 }
 
 void setup() {
@@ -104,28 +110,35 @@ void loop() {
   float rawRpm = 0;
   if (now - snapLast > 450000) {
       rawRpm = 0;
+      lockoutTime = 0;
+      for(int i=0; i<3; i++) rpmBuffer[i] = 0; // Clear buffer
   } else if (snapInt > 0) {
-    rawRpm = (60000000.0 / snapInt) / config.rpmDivider;
+    rawRpm = (60000000.0 / snapInt) / 5.5; 
   }
 
-  // --- ULTRA STABLE FILTER (Bi-Directional) ---
+  // --- FILTERING ---
   if (rawRpm > 0) {
-      if (filteredRpm > 500) {
-          // 1. Abaikan anjlok > 40% (Missing Tooth)
-          if (rawRpm < (filteredRpm * 0.6)) {
-              rawRpm = filteredRpm;
-          }
-          // 2. Abaikan lonjakan > 50% (Ignition Noise)
-          else if (rawRpm > (filteredRpm * 1.5)) {
-              rawRpm = filteredRpm;
-          }
+      // Masukkan ke Buffer Median
+      rpmBuffer[bufIdx] = rawRpm;
+      bufIdx = (bufIdx + 1) % 3;
+      
+      // Hitung Median dari 3 data terakhir
+      float a = rpmBuffer[0];
+      float b = rpmBuffer[1];
+      float c = rpmBuffer[2];
+      float medianRpm = (a < b) ? ((b < c) ? b : ((a < c) ? c : a)) : ((a < c) ? a : ((b < c) ? c : b));
+      
+      if (filteredRpm < 100) {
+          filteredRpm = medianRpm; 
+      } else {
+          // EMA Smoothing 0.8
+          filteredRpm = (filteredRpm * 0.8) + (medianRpm * 0.2);
       }
-      // Smoothing Arduino (Faktor 0.8)
-      filteredRpm = (filteredRpm * 0.8) + (rawRpm * 0.2); 
   } else {
       filteredRpm = 0; 
   }
 
+  // Quick Shifter Logic
   bool currentState = digitalRead(PIN_SENSOR_QS);
   if (currentState == LOW && lastSensorState == HIGH) {
       if ((int)filteredRpm >= config.minRpmActive) {
@@ -133,7 +146,6 @@ void loop() {
           if ((int)filteredRpm >= config.tableRpm[3])      kTime = config.tableKill[3];
           else if ((int)filteredRpm >= config.tableRpm[2]) kTime = config.tableKill[2];
           else if ((int)filteredRpm >= config.tableRpm[1]) kTime = config.tableKill[1];
-          
           digitalWrite(PIN_KILL_OUT, HIGH);
           delay(kTime);
           digitalWrite(PIN_KILL_OUT, LOW);
@@ -143,7 +155,7 @@ void loop() {
   }
   lastSensorState = currentState;
 
-  if (millis() - lastSend > 130) {
+  if (millis() - lastSend > 105) {
     lastSend = millis();
     int out = (int)(filteredRpm * config.rpmCalibration);
     bt.print("RPM:");
