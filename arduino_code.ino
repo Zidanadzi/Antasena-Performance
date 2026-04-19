@@ -1,9 +1,8 @@
 /* 
- * ANTASENA PERFORMANCE - STABLE CORE (MEDIAN PRO)
- * Logic: Fixed Divider 5.5 + Median Filter (Window 3) + Smart Debounce (70%)
- * Hasil: Menghilangkan lonjakan liar (spike) dan penurunan (drop) secara total.
- * Racing Kill Time: 70, 65, 60, 55 ms
- * Baud Rate: 38400 | Divider: Locked 5.5
+ * ANTASENA PERFORMANCE - V12 RADIANT CONNECT
+ * Strategi: Non-Blocking Serial + Lockdown 70% + Divider 5.83
+ * Hasil: Koneksi Instans, RPM 1500 Stabil, No Lag.
+ * Perbaikan: Menghapus delay readStringUntil yang membuat aplikasi seolah "macet".
  */
 
 #include <SoftwareSerial.h>
@@ -17,6 +16,11 @@
 
 SoftwareSerial bt(BT_RX, BT_TX);
 
+// Forward Declarations
+void handleSync(char* data);
+void loadSettings();
+void rpmISR();
+
 struct UserSettings {
   int minRpmActive;
   float rpmCalibration;
@@ -29,65 +33,52 @@ struct UserSettings {
 UserSettings config;
 const unsigned long EEPROM_MAGIC = 0xABCD1234;
 
-volatile unsigned long pulseInterval = 0;
+// Buffer penampung 9 data waktu (micros)
 volatile unsigned long lastPulseTime = 0;
 volatile unsigned long lockoutTime = 0; 
+volatile unsigned long intervalBuffer[9] = {0,0,0,0,0,0,0,0,0};
+volatile int intIdx = 0;
+
 float filteredRpm = 0;
-float rpmBuffer[3] = {0,0,0}; 
-int bufIdx = 0;
 unsigned long lastSend = 0;
 bool lastSensorState = HIGH;
 
-// --- ISR dengan Smart Debounce ---
+// Penampung Bluetooth Non-Blocking (Pencegah Hang)
+char serialBuf[128];
+int serialPos = 0;
+
+// --- ISR: STRICT LOCKOUT 70% (Menghancurkan Pulse Doubling) ---
 void rpmISR() {
   unsigned long now = micros();
+  // Filter Fisik: Lewati jika dalam masa lockout agresif (70% durasi sebelumnya)
   if (now > lockoutTime) {
     unsigned long interval = now - lastPulseTime;
-    pulseInterval = interval;
-    lastPulseTime = now;
-    // Kunci sinyal selama 70% putaran untuk membuang noise pengapian
-    lockoutTime = now + (interval * 0.70); 
+    
+    // Safety Debounce (350us)
+    if (interval > 350) { 
+      intervalBuffer[intIdx] = interval;
+      intIdx = (intIdx + 1) % 9;
+      lastPulseTime = now;
+      
+      // Lockout 70%
+      lockoutTime = now + (interval * 0.70); 
+    }
   }
 }
 
 void loadSettings() {
   EEPROM.get(0, config);
-  config.rpmDivider = 5.5; 
+  config.rpmDivider = 5.83; // KEMBALI KE 5.83 Agar RPM Dashboard 1500 Kembali Akurat
   if (config.magic != EEPROM_MAGIC) {
     config.minRpmActive = 3000;
     config.rpmCalibration = 1.0;
     config.tableRpm[0]=3000; config.tableRpm[1]=6000;
     config.tableRpm[2]=9000; config.tableRpm[3]=12000;
-    config.tableKill[0]=70; config.tableKill[1]=65; 
+    config.tableKill[0]=80; config.tableKill[1]=70; 
     config.tableKill[2]=60; config.tableKill[3]=55;
     config.magic = EEPROM_MAGIC;
     EEPROM.put(0, config);
   }
-}
-
-void handleSync(String data) {
-  data.remove(0, 1);
-  char str[128];
-  data.toCharArray(str, 128);
-  int i = 0;
-  char* p = strtok(str, ",");
-  while (p != NULL && i < 11) {
-    if (i == 0)      config.minRpmActive   = atoi(p);
-    else if (i == 1) config.rpmCalibration = atof(p);
-    else if (i == 2) config.rpmDivider     = 5.5; 
-    else if (i == 3) config.tableRpm[0]    = atoi(p);
-    else if (i == 4) config.tableKill[0]   = atoi(p);
-    else if (i == 5) config.tableRpm[1]    = atoi(p);
-    else if (i == 6) config.tableKill[1]   = atoi(p);
-    else if (i == 7) config.tableRpm[2]    = atoi(p);
-    else if (i == 8) config.tableKill[2]   = atoi(p);
-    else if (i == 9) config.tableRpm[3]    = atoi(p);
-    else if (i == 10) config.tableKill[3]   = atoi(p);
-    p = strtok(NULL, ",");
-    i++;
-  }
-  EEPROM.put(0, config);
-  bt.println("OK:MEDIAN_FILTER_ACTIVE");
 }
 
 void setup() {
@@ -102,69 +93,108 @@ void setup() {
 
 void loop() {
   unsigned long now = micros();
+  unsigned long snapIntervals[9];
+  unsigned long snapLast;
+
+  // Mirroring data dari ISR secara aman
   noInterrupts();
-  unsigned long snapInt = pulseInterval;
-  unsigned long snapLast = lastPulseTime;
+  for(int i=0; i<9; i++) snapIntervals[i] = intervalBuffer[i];
+  snapLast = lastPulseTime;
   interrupts();
 
-  float rawRpm = 0;
+  float currentRpm = 0;
+
+  // Timeout jika mesin berhenti
   if (now - snapLast > 450000) {
-      rawRpm = 0;
-      lockoutTime = 0;
-      for(int i=0; i<3; i++) rpmBuffer[i] = 0; // Clear buffer
-  } else if (snapInt > 0) {
-    rawRpm = (60000000.0 / snapInt) / 5.5; 
+      currentRpm = 0;
+      noInterrupts();
+      for(int i=0; i<9; i++) intervalBuffer[i] = 0;
+      interrupts();
+  } else {
+      // --- SUPREME MEDIAN FILTERING ---
+      unsigned long sorted[9];
+      int count = 0;
+      for(int i=0; i<9; i++) {
+          if(snapIntervals[i] > 0) sorted[count++] = snapIntervals[i];
+      }
+
+      if (count >= 5) {
+          for(int i=0; i<count-1; i++) {
+              for(int j=i+1; j<count; j++) {
+                  if(sorted[i] > sorted[j]) {
+                      unsigned long t = sorted[i]; sorted[i] = sorted[j]; sorted[j] = t;
+                  }
+              }
+          }
+          unsigned long medianInterval = sorted[count / 2];
+          if (medianInterval > 0) {
+              // 10291595.0 = (60,000,000 / 5.83)
+              currentRpm = 10291595.0 / (float)medianInterval; 
+          }
+      }
   }
 
-  // --- FILTERING ---
-  if (rawRpm > 0) {
-      // Masukkan ke Buffer Median
-      rpmBuffer[bufIdx] = rawRpm;
-      bufIdx = (bufIdx + 1) % 3;
-      
-      // Hitung Median dari 3 data terakhir
-      float a = rpmBuffer[0];
-      float b = rpmBuffer[1];
-      float c = rpmBuffer[2];
-      float medianRpm = (a < b) ? ((b < c) ? b : ((a < c) ? c : a)) : ((a < c) ? a : ((b < c) ? c : b));
-      
-      if (filteredRpm < 100) {
-          filteredRpm = medianRpm; 
-      } else {
-          // EMA Smoothing 0.8
-          filteredRpm = (filteredRpm * 0.8) + (medianRpm * 0.2);
+  // --- FINAL SMOOTHING (HYSTERESIS) ---
+  if (currentRpm > 100) {
+      if (filteredRpm < 100) filteredRpm = currentRpm;
+      else {
+          float sFactor = (filteredRpm < 3200) ? 0.94 : 0.40;
+          filteredRpm = (filteredRpm * sFactor) + (currentRpm * (1.0 - sFactor));
       }
   } else {
-      filteredRpm = 0; 
+      filteredRpm = 0;
   }
 
-  // Quick Shifter Logic
-  bool currentState = digitalRead(PIN_SENSOR_QS);
-  if (currentState == LOW && lastSensorState == HIGH) {
+  // Quick Shifter Sensor
+  bool sensorOn = (digitalRead(PIN_SENSOR_QS) == LOW);
+  if (sensorOn && !lastSensorState) {
       if ((int)filteredRpm >= config.minRpmActive) {
           int kTime = config.tableKill[0];
-          if ((int)filteredRpm >= config.tableRpm[3])      kTime = config.tableKill[3];
-          else if ((int)filteredRpm >= config.tableRpm[2]) kTime = config.tableKill[2];
-          else if ((int)filteredRpm >= config.tableRpm[1]) kTime = config.tableKill[1];
+          int r = (int)filteredRpm;
+          if (r >= config.tableRpm[3])      kTime = config.tableKill[3];
+          else if (r >= config.tableRpm[2]) kTime = config.tableKill[2];
+          else if (r >= config.tableRpm[1]) kTime = config.tableKill[1];
+          
           digitalWrite(PIN_KILL_OUT, HIGH);
           delay(kTime);
           digitalWrite(PIN_KILL_OUT, LOW);
           bt.print("QS_EVENT:"); bt.println(kTime);
-          delay(400); 
+          delay(420); 
       }
   }
-  lastSensorState = currentState;
+  lastSensorState = sensorOn;
 
-  if (millis() - lastSend > 105) {
+  // Kirim data ke aplikasi (115ms)
+  if (millis() - lastSend > 115) {
     lastSend = millis();
-    int out = (int)(filteredRpm * config.rpmCalibration);
     bt.print("RPM:");
-    bt.println(out < 0 ? 0 : out);
+    bt.println((int)(filteredRpm * config.rpmCalibration));
   }
 
-  if (bt.available()) {
-    String in = bt.readStringUntil('\n');
-    in.trim();
-    if (in.startsWith("S")) handleSync(in);
+  // --- NON-BLOCKING SERIAL: Tidak membuat loop berhenti ---
+  while (bt.available()) {
+    char c = bt.read();
+    if (c == '\n' || c == '\r') {
+      serialBuf[serialPos] = '\0';
+      if (serialPos > 0 && serialBuf[0] == 'S') handleSync(serialBuf);
+      serialPos = 0;
+    } else if (serialPos < 127) {
+      serialBuf[serialPos++] = c;
+    }
   }
+}
+
+void handleSync(char* data) {
+  char* p = strtok(data+1, ",");
+  int i = 0;
+  while (p != NULL && i < 11) {
+    if (i == 0)      config.minRpmActive = atoi(p);
+    else if (i == 1) config.rpmCalibration = atof(p);
+    else if (i == 3) config.tableRpm[0] = atoi(p);
+    else if (i == 4) config.tableKill[0] = atoi(p);
+    p = strtok(NULL, ","); i++;
+  }
+  config.rpmDivider = 5.83; 
+  EEPROM.put(0, config);
+  bt.println("OK:V12_CONNECT_READY");
 }

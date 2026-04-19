@@ -356,6 +356,8 @@ class AppState extends ChangeNotifier {
     try {
       _isConnecting = true;
       _connectionError = null;
+      _messageBuffer = ""; // CLEAR BUFFER ON CONNECT
+      _totalBytesReceived = 0;
       notifyListeners();
 
       if (kIsWeb || device.address.contains('MOCK')) {
