@@ -15,9 +15,8 @@
 
 SoftwareSerial bt(BT_RX, BT_TX);
 
-// Forward Declarations
+// Forward Declaration required by strict compilers
 void handleSync(char* data);
-void loadSettings();
 
 struct UserSettings {
   int minRpmActive;

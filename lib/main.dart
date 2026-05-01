@@ -1038,7 +1038,7 @@ class _MainNavigationState extends State<MainNavigation> {
           selectedLabelStyle: const TextStyle(fontSize: 10, fontWeight: FontWeight.bold),
           unselectedLabelStyle: const TextStyle(fontSize: 10),
           items: const [
-            BottomNavigationBarItem(icon: Icon(Icons.speed), label: 'DASH'),
+            BottomNavigationBarItem(icon: Icon(Icons.speed), label: 'DASHBOARD'),
             BottomNavigationBarItem(icon: Icon(Icons.tune), label: 'TUNING'),
             BottomNavigationBarItem(icon: Icon(Icons.timer), label: 'RACE'),
           ],
@@ -1144,9 +1144,8 @@ class DashboardPage extends StatelessWidget {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      mainAxisAlignment: MainAxisAlignment.end,
                       children: [
-                        Text("ENGINE ROTATION", style: GoogleFonts.jetBrainsMono(color: isShiftPoint ? Colors.black.withOpacity(0.5) : Colors.white.withOpacity(0.3), fontSize: 9, letterSpacing: 1, fontWeight: FontWeight.bold)),
                         Text("${state.rpm} RPM", style: GoogleFonts.exo2(color: isShiftPoint ? Colors.black : Colors.white, fontSize: 18, fontWeight: FontWeight.w900, fontStyle: FontStyle.italic)),
                       ],
                     ),
@@ -1330,8 +1329,6 @@ class DashboardPage extends StatelessWidget {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text('BLUETOOTH SCANNER', style: GoogleFonts.orbitron(fontSize: 12, fontWeight: FontWeight.bold, letterSpacing: 2)),
-                      const SizedBox(height: 4),
-                      Text('Classic (HC-05) & BLE Support', style: TextStyle(fontSize: 8, color: Colors.white.withOpacity(0.2), letterSpacing: 1)),
                     ],
                   ),
                   if (!state.isScanning && !state.isConnected)
