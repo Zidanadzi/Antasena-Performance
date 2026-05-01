@@ -679,22 +679,41 @@ class AppState extends ChangeNotifier {
 
   void _initGps() async {
     try {
+      bool serviceEnabled = await Geolocator.isLocationServiceEnabled();
+      if (!serviceEnabled) {
+        debugPrint('Location services are disabled.');
+        // Optionally prompt user to enable location services
+        return;
+      }
+
       LocationPermission permission = await Geolocator.checkPermission();
       if (permission == LocationPermission.denied) {
         permission = await Geolocator.requestPermission();
+        if (permission == LocationPermission.denied) {
+          debugPrint('Location permissions are denied');
+          return;
+        }
       }
       
+      if (permission == LocationPermission.deniedForever) {
+        debugPrint('Location permissions are permanently denied.');
+        return;
+      }
+
+      // Start the position stream with robust settings
       Geolocator.getPositionStream(
         locationSettings: const LocationSettings(
-          accuracy: LocationAccuracy.bestForNavigation,
-          distanceFilter: 1,
+          accuracy: LocationAccuracy.high, // 'high' is more robust than 'bestForNavigation' in many conditions
+          distanceFilter: 0, // Continuous updates for smoother speedometer
         ),
       ).listen((Position position) {
-        _speed = position.speed * 3.6; // m/s to km/h
+        // Clamp speed to non-negative and handle potentially null/invalid speed from GPS
+        _speed = (position.speed >= 0) ? (position.speed * 3.6) : 0; 
         _gpsAccuracy = position.accuracy;
         notifyListeners();
       }).onError((e) {
         debugPrint('GPS Stream Error: $e');
+        // If error occurs, we could potentially retry after a delay
       });
     } catch (e) {
       debugPrint('GPS Init Error: $e');
@@ -2180,7 +2199,7 @@ class RaceboxPage extends StatelessWidget {
     if (accuracy == 0) {
       color = Colors.white24;
       icon = Icons.gps_off;
-      quality = 'NO FIX';
+      quality = 'NO SIGNAL';
     } else if (accuracy < 5) {
       color = const Color(0xFF00FF00); // Excellent
       icon = Icons.gps_fixed;
